@@ -26,5 +26,14 @@ admin_commands = bot.create_group("admin", "Comandos de administración", guild_
 @commands.has_role(ADMIN_ROLE_NAME) # Verificamos si la lectura de rol funciona
 async def ping_admin(ctx: discord.ApplicationContext):
     await ctx.respond("Pong! Los comandos de admin están funcionando.", ephemeral=True)
+# Añade este comando dentro de la sección de admin
+@admin_commands.command(name="test_db", description="Prueba la conexión con la base de datos.")
+@commands.has_role(ADMIN_ROLE_NAME)
+async def test_db(ctx: discord.ApplicationContext):
+    try:
+        balance = db.get_balance(ctx.author.id)
+        await ctx.respond(f"Conexión con la DB exitosa. Tu saldo es: {balance} LBucks.", ephemeral=True)
+    except Exception as e:
+        await ctx.respond(f"Error al conectar con la DB: {e}", ephemeral=True)
 
 bot.run(TOKEN)
