@@ -182,8 +182,10 @@ async def on_ready():
     except Exception as e:
         print(f"⚠️ Error al sincronizar comandos: {e}")
 
+    # Registrar vistas persistentes AQUÍ, cuando el loop está activo
     bot.add_view(MainMenuView())
     bot.add_view(AdminActionView())
+
 
 # --- MANEJADOR DE COMPONENTES CON CUSTOM_ID ---
 @bot.listen()
@@ -230,8 +232,6 @@ def run_web_server():
 
 def run_bot():
     # Registrar vistas persistentes ANTES de ejecutar el bot
-    bot.add_view(MainMenuView())
-    bot.add_view(AdminActionView())
     bot.run(TOKEN)  # <--- Usar bot.run() y NO asyncio.run()
 
 if __name__ == "__main__":
