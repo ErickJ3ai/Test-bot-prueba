@@ -13,6 +13,7 @@ bot = discord.Bot(intents=intents)
 @bot.event
 async def on_ready():
     print(f"✅ BOT '{bot.user}' CONECTADO")
+    db.init_db() # Esta línea es la que ejecuta la creación de las tablas
 
 @bot.slash_command(guild_ids=[GUILD_ID], name="hola", description="Un comando de prueba.")
 async def hola(ctx: discord.ApplicationContext):
