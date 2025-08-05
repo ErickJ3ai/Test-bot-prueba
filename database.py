@@ -1,6 +1,5 @@
 import sqlite3
 import datetime
-import random
 
 DB_NAME = 'evento_robux.db'
 
@@ -9,7 +8,6 @@ def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
-    # Tabla de usuarios
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS users (
         user_id INTEGER PRIMARY KEY,
@@ -17,64 +15,33 @@ def init_db():
         last_daily TEXT
     )''')
 
-    # Tabla para el stock y precios de la tienda
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS shop (
         item_id TEXT PRIMARY KEY,
-        price INTEGER DEFAULT 100,
-        stock INTEGER DEFAULT 10
+        price INTEGER,
+        stock INTEGER
     )''')
     
-    # Tabla para registrar los canjeos pendientes
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS redemptions (
         redemption_id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         item_id TEXT,
         message_id INTEGER,
-        status TEXT DEFAULT 'pending' -- pending, completed, cancelled_by_admin
-    )''')
-    
-    # --- Tablas para el sistema de Misiones ---
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS missions (
-        mission_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        mission_type TEXT UNIQUE, -- 'send_messages', 'invite_users'
-        description TEXT,
-        target_count INTEGER,
-        reward INTEGER
+        status TEXT DEFAULT 'pending'
     )''')
 
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS user_missions (
-        user_id INTEGER,
-        mission_id INTEGER,
-        current_progress INTEGER DEFAULT 0,
-        completed INTEGER DEFAULT 0, -- 0 for false, 1 for true
-        PRIMARY KEY (user_id, mission_id),
-        FOREIGN KEY(user_id) REFERENCES users(user_id),
-        FOREIGN KEY(mission_id) REFERENCES missions(mission_id)
-    )''')
-
-    # --- Inserción de datos iniciales ---
-    # Inserta los items de la tienda si no existen
-    shop_items = ['5_robux', '10_robux', '25_robux', '30_robux', '45_robux', 
-                  '55_robux', '60_robux', '75_robux', '80_robux', '100_robux']
-    for item in shop_items:
-        cursor.execute("INSERT OR IGNORE INTO shop (item_id, price, stock) VALUES (?, 50, 20)", (item,))
-
-    # Inserta misiones base si no existen
-    base_missions = [
-        ('send_messages', 'Envía 50 mensajes en el servidor.', 50, 25),
-        ('invite_users', 'Invita a 1 nuevo miembro al servidor.', 1, 50)
-        # Puedes añadir más tipos de misiones aquí
+    shop_items = [
+        ('5_robux', 50, 20), ('10_robux', 100, 20), ('25_robux', 250, 15),
+        ('30_robux', 300, 15), ('45_robux', 450, 10), ('55_robux', 550, 10),
+        ('60_robux', 600, 5), ('75_robux', 750, 5), ('80_robux', 800, 5),
+        ('100_robux', 1000, 3)
     ]
-    cursor.executemany("INSERT OR IGNORE INTO missions (mission_type, description, target_count, reward) VALUES (?, ?, ?, ?)", base_missions)
+    cursor.executemany("INSERT OR IGNORE INTO shop (item_id, price, stock) VALUES (?, ?, ?)", shop_items)
 
     conn.commit()
     conn.close()
 
-# --- Funciones de Usuario ---
 def get_user(user_id):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -86,7 +53,7 @@ def get_user(user_id):
     return user
 
 def update_lbucks(user_id, amount):
-    get_user(user_id) # Asegura que el usuario exista
+    get_user(user_id)
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("UPDATE users SET lbucks = lbucks + ? WHERE user_id = ?", (amount, user_id))
@@ -95,7 +62,7 @@ def update_lbucks(user_id, amount):
 
 def get_balance(user_id):
     user = get_user(user_id)
-    return user[1] # lbucks
+    return user[1]
 
 def update_daily_claim(user_id):
     now = datetime.datetime.utcnow().isoformat()
@@ -105,7 +72,6 @@ def update_daily_claim(user_id):
     conn.commit()
     conn.close()
 
-# --- Funciones de la Tienda ---
 def get_shop_items():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -143,7 +109,6 @@ def set_shop_stock(item_id, quantity):
     conn.commit()
     conn.close()
 
-# --- Funciones de Canjeo ---
 def create_redemption(user_id, item_id, message_id):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
