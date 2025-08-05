@@ -1,7 +1,6 @@
 import discord
 from discord.ext import commands
 from discord.ui import Button, View
-import asyncio
 import os
 from dotenv import load_dotenv
 import datetime
@@ -11,6 +10,7 @@ from threading import Thread
 from waitress import serve
 import database as db
 from config import GUILD_ID, ADMIN_ROLE_NAME, REDEMPTION_LOG_CHANNEL_ID
+import asyncio
 
 # --- CONFIGURACIÓN E INICIALIZACIÓN ---
 load_dotenv()
@@ -31,8 +31,8 @@ class MainMenuView(View):
         await interaction.response.defer(ephemeral=True)
         user_id = interaction.user.id
         user_data = db.get_user(user_id)
-        if not user_data:
-            await interaction.followup.send("❌ Error al obtener tus datos. Intenta más tarde.")
+        if user_data is None:
+            await interaction.followup.send("Error al obtener tus datos. Intenta de nuevo.")
             return
         last_claim_str = user_data[2]
         if last_claim_str:
@@ -49,19 +49,25 @@ class MainMenuView(View):
 
     @discord.ui.button(label="🏪 Centro de Canjeo", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
     async def redeem_button(self, button: Button, interaction: discord.Interaction):
-        items = db.get_shop_items()
-        if not items:
-            await interaction.response.send_message("❌ No hay artículos disponibles por ahora.", ephemeral=True)
-            return
         await interaction.response.send_message("Abriendo el Centro de Canjeo...", view=RedeemMenuView(), ephemeral=True)
+
+    @discord.ui.button(label="💰 Consultar Saldo", style=discord.ButtonStyle.secondary, custom_id="main:check_balance")
+    async def balance_button(self, button: Button, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        balance = db.get_balance(interaction.user.id)
+        await interaction.followup.send(f"Tienes un total de {balance} LBucks. 🪙")
+
+    # Nuevo botón para ver saldo (con label "💵 Ver saldo")
+    @discord.ui.button(label="💵 Ver saldo", style=discord.ButtonStyle.secondary, custom_id="main:view_balance")
+    async def view_balance_button(self, button: Button, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        balance = db.get_balance(interaction.user.id)
+        await interaction.followup.send(f"Tu saldo actual es: **{balance} LBucks** 🪙")
 
 class RedeemMenuView(View):
     def __init__(self):
         super().__init__(timeout=300)
-        items = db.get_shop_items()
-        if not items:
-            # Si por alguna razón no hay items, la vista queda vacía (opcional: agregar botón disabled o mensaje)
-            return
+        items = db.get_shop_items() or []
         for item_id, price, stock in items:
             robux_amount = item_id.split('_')[0]
             self.add_item(Button(
@@ -182,11 +188,6 @@ async def on_ready():
     except Exception as e:
         print(f"⚠️ Error al sincronizar comandos: {e}")
 
-    # Registrar vistas persistentes AQUÍ, cuando el loop está activo
-    bot.add_view(MainMenuView())
-    bot.add_view(AdminActionView())
-
-
 # --- MANEJADOR DE COMPONENTES CON CUSTOM_ID ---
 @bot.listen()
 async def on_interaction(interaction: discord.Interaction):
@@ -211,6 +212,27 @@ async def evento(ctx: discord.ApplicationContext):
     embed = discord.Embed(title="🎉 Evento de Robux Gratis 🎉", description="¡Bienvenido al evento! Usa los botones de abajo.", color=discord.Color.gold())
     await ctx.followup.send(embed=embed, view=MainMenuView())
 
+# Nuevo comando para consultar saldo
+@bot.slash_command(guild_ids=[GUILD_ID], name="saldo", description="Consulta tu saldo actual de LBucks.")
+async def saldo(ctx: discord.ApplicationContext):
+    balance = db.get_balance(ctx.user.id)
+    embed = discord.Embed(
+        title="💰 Tu saldo actual",
+        description=f"Tienes **{balance} LBucks** disponibles.",
+        color=discord.Color.blue()
+    )
+    class RefreshBalanceView(View):
+        @discord.ui.button(label="Actualizar saldo", style=discord.ButtonStyle.secondary)
+        async def refresh(self, button: Button, interaction: discord.Interaction):
+            new_balance = db.get_balance(interaction.user.id)
+            new_embed = discord.Embed(
+                title="💰 Tu saldo actual",
+                description=f"Tienes **{new_balance} LBucks** disponibles.",
+                color=discord.Color.blue()
+            )
+            await interaction.response.edit_message(embed=new_embed)
+    await ctx.respond(embed=embed, view=RefreshBalanceView(), ephemeral=True)
+
 admin_commands = bot.create_group("admin", "Comandos de administración", guild_ids=[GUILD_ID])
 
 @admin_commands.command(name="add_lbucks", description="Añade LBucks a un usuario.")
@@ -222,7 +244,6 @@ async def add_lbucks(ctx: discord.ApplicationContext, usuario: discord.Member, c
 
 # --- SERVIDOR WEB Y EJECUCIÓN ---
 app = Flask('')
-
 @app.route('/')
 def home():
     return "El bot está vivo."
@@ -232,7 +253,9 @@ def run_web_server():
 
 def run_bot():
     # Registrar vistas persistentes ANTES de ejecutar el bot
-    bot.run(TOKEN)  # <--- Usar bot.run() y NO asyncio.run()
+    bot.add_view(MainMenuView())
+    bot.add_view(AdminActionView())
+    asyncio.run(bot.start(TOKEN))
 
 if __name__ == "__main__":
     web_server_thread = Thread(target=run_web_server)
