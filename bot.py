@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands # Necesitamos esto para has_role
 import os
 from config import GUILD_ID, ADMIN_ROLE_NAME # Importamos desde config
+import database as db
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 
