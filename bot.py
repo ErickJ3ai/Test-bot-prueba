@@ -250,16 +250,12 @@ def home():
 
 def run_web_server():
     serve(app, host="0.0.0.0", port=8080)
-    
-async def start_bot():
-    # Registrar vistas persistentes aquí, cuando el loop ya esté activo
+
+def run_bot():
+   # Registrar vistas persistentes justo antes de iniciar el bot
     bot.add_view(MainMenuView())
     bot.add_view(AdminActionView())
-    await bot.start(TOKEN)
-def run_bot():
-    # Registrar vistas persistentes ANTES de ejecutar el bot
-    asyncio.run(bot.start(TOKEN))
-
+    bot.run(TOKEN)
 if __name__ == "__main__":
     web_server_thread = Thread(target=run_web_server)
     web_server_thread.start()
