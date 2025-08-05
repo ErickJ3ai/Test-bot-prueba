@@ -27,7 +27,7 @@ class MainMenuView(View):
 
     @discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
     async def daily_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        await interaction.response.defer(ephemeral=True)
         user_id = interaction.user.id
         user_data = db.get_user(user_id)
         last_claim_str = user_data[2]
@@ -49,7 +49,7 @@ class MainMenuView(View):
 
     @discord.ui.button(label="💰 Consultar Saldo", style=discord.ButtonStyle.secondary, custom_id="main:check_balance")
     async def balance_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        await interaction.response.defer(ephemeral=True)
         balance = db.get_balance(interaction.user.id)
         await interaction.followup.send(f"Tienes un total de {balance} LBucks. 🪙")
 
@@ -75,7 +75,7 @@ class ConfirmCancelView(View):
 
     @discord.ui.button(label="Confirmar Canjeo", style=discord.ButtonStyle.success)
     async def confirm_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        await interaction.response.defer(ephemeral=True)
         balance = db.get_balance(self.user_id)
         item_data = db.get_item(self.item_id)
         if not item_data or item_data[2] <= 0:
@@ -90,7 +90,12 @@ class ConfirmCancelView(View):
         log_channel = bot.get_channel(REDEMPTION_LOG_CHANNEL_ID)
         if log_channel:
             robux_amount = self.item_id.split('_')[0]
-            embed = discord.Embed(title="⏳ Nuevo Canjeo Pendiente", description=f"El usuario **{interaction.user.name}** (`{interaction.user.id}`) ha canjeado **{robux_amount} Robux**.", color=discord.Color.orange(), timestamp=datetime.datetime.utcnow())
+            embed = discord.Embed(
+                title="⏳ Nuevo Canjeo Pendiente",
+                description=f"El usuario **{interaction.user.name}** (`{interaction.user.id}`) ha canjeado **{robux_amount} Robux**.",
+                color=discord.Color.orange(),
+                timestamp=datetime.datetime.utcnow()
+            )
             embed.set_thumbnail(url=interaction.user.display_avatar.url)
             log_message = await log_channel.send(embed=embed, view=AdminActionView())
             db.create_redemption(self.user_id, self.item_id, log_message.id)
@@ -120,8 +125,10 @@ class AdminActionView(View):
         db.update_redemption_status(redemption[0], 'completed')
         user = await bot.fetch_user(redemption[1])
         item_name = redemption[2].split('_')[0] + " Robux"
-        try: await user.send(f"✅ ¡Tu canjeo de **{item_name}** ha sido completado!")
-        except discord.Forbidden: pass
+        try:
+            await user.send(f"✅ ¡Tu canjeo de **{item_name}** ha sido completado!")
+        except discord.Forbidden:
+            pass
             
         edited_embed = interaction.message.embeds[0]
         edited_embed.title = "✅ Canjeo Completado"
@@ -148,8 +155,10 @@ class AdminActionView(View):
         db.update_redemption_status(redemption[0], 'cancelled_by_admin')
         user = await bot.fetch_user(redemption[1])
         item_name = redemption[2].split('_')[0] + " Robux"
-        try: await user.send(f"❌ Tu canjeo de **{item_name}** fue cancelado. Tus LBucks han sido devueltos.")
-        except discord.Forbidden: pass
+        try:
+            await user.send(f"❌ Tu canjeo de **{item_name}** fue cancelado. Tus LBucks han sido devueltos.")
+        except discord.Forbidden:
+            pass
             
         edited_embed = interaction.message.embeds[0]
         edited_embed.title = "❌ Canjeo Cancelado por Admin"
@@ -162,20 +171,28 @@ class AdminActionView(View):
 async def on_ready():
     print(f"✅ BOT '{bot.user}' CONECTADO Y LISTO")
     db.init_db()
-    bot.add_view(MainMenuView())
-    bot.add_view(AdminActionView())
-    print("Vistas persistentes registradas.")
+    try:
+        synced = await bot.sync_commands(guild_id=GUILD_ID)
+        print(f"🔄 {len(synced)} comandos sincronizados con el servidor.")
+    except Exception as e:
+        print(f"⚠️ Error al sincronizar comandos: {e}")
 
-@bot.event
+# --- MANEJADOR DE COMPONENTES CON CUSTOM_ID ---
+@bot.listen()
 async def on_interaction(interaction: discord.Interaction):
     if interaction.type == discord.InteractionType.component:
         custom_id = interaction.data['custom_id']
         if custom_id.startswith("redeem_"):
             item_id = custom_id.replace("redeem_", "")
             item = db.get_item(item_id)
-            if not item: return await interaction.response.send_message("Este item ya no existe.", ephemeral=True)
+            if not item:
+                return await interaction.response.send_message("Este item ya no existe.", ephemeral=True)
             view = ConfirmCancelView(user_id=interaction.user.id, item_id=item_id, price=item[1])
-            await interaction.response.send_message(f"¿Confirmas el canje de **{item[0].split('_')[0]} Robux** por **{item[1]} LBucks**?", view=view, ephemeral=True)
+            await interaction.response.send_message(
+                f"¿Confirmas el canje de **{item[0].split('_')[0]} Robux** por **{item[1]} LBucks**?",
+                view=view,
+                ephemeral=True
+            )
 
 # --- COMANDOS SLASH ---
 @bot.slash_command(guild_ids=[GUILD_ID], name="evento", description="Muestra el menú principal del evento.")
@@ -187,23 +204,27 @@ async def evento(ctx: discord.ApplicationContext):
 admin_commands = bot.create_group("admin", "Comandos de administración", guild_ids=[GUILD_ID])
 
 @admin_commands.command(name="add_lbucks", description="Añade LBucks a un usuario.")
-@commands.has_role(ADMIN_ROLE_NAME)
+@discord.default_permissions(administrator=True)
 async def add_lbucks(ctx: discord.ApplicationContext, usuario: discord.Member, cantidad: int):
     await ctx.defer(ephemeral=True)
     db.update_lbucks(usuario.id, cantidad)
     await ctx.followup.send(f"Se han añadido {cantidad} LBucks a {usuario.mention}.")
-
-# ... (Aquí puedes añadir el resto de tus comandos de admin como set_price y set_stock)
 
 # --- SERVIDOR WEB Y EJECUCIÓN ---
 app = Flask('')
 @app.route('/')
 def home():
     return "El bot está vivo."
+
 def run_web_server():
     serve(app, host="0.0.0.0", port=8080)
+
 def run_bot():
+    # Registrar vistas persistentes ANTES de ejecutar el bot
+    bot.add_view(MainMenuView())
+    bot.add_view(AdminActionView())
     bot.run(TOKEN)
+
 if __name__ == "__main__":
     web_server_thread = Thread(target=run_web_server)
     web_server_thread.start()
