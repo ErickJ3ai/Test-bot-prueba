@@ -181,13 +181,23 @@ class AdminActionView(View):
 @bot.event
 async def on_ready():
     print(f"✅ BOT '{bot.user}' CONECTADO Y LISTO")
+
+    # Inicializar base de datos
     db.init_db()
+
+    # Registrar vistas persistentes solo una vez
+    if not hasattr(bot, "persistent_views_added"):
+        bot.add_view(MainMenuView())
+        bot.add_view(AdminActionView())
+        bot.persistent_views_added = True
+        print("👁️ Vistas persistentes registradas.")
+
+    # Sincronizar comandos slash
     try:
         synced = await bot.sync_commands(guild_id=GUILD_ID)
         print(f"🔄 {len(synced)} comandos sincronizados con el servidor.")
     except Exception as e:
         print(f"⚠️ Error al sincronizar comandos: {e}")
-
 # --- MANEJADOR DE COMPONENTES CON CUSTOM_ID ---
 @bot.listen()
 async def on_interaction(interaction: discord.Interaction):
@@ -253,8 +263,6 @@ def run_web_server():
 
 def run_bot():
    # Registrar vistas persistentes justo antes de iniciar el bot
-    bot.add_view(MainMenuView())
-    bot.add_view(AdminActionView())
     bot.run(TOKEN)
 if __name__ == "__main__":
     web_server_thread = Thread(target=run_web_server)
