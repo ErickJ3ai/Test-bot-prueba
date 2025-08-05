@@ -31,6 +31,9 @@ class MainMenuView(View):
         await interaction.response.defer(ephemeral=True)
         user_id = interaction.user.id
         user_data = db.get_user(user_id)
+        if not user_data:
+            await interaction.followup.send("❌ Error al obtener tus datos. Intenta más tarde.")
+            return
         last_claim_str = user_data[2]
         if last_claim_str:
             last_claim_time = datetime.datetime.fromisoformat(last_claim_str)
@@ -46,18 +49,19 @@ class MainMenuView(View):
 
     @discord.ui.button(label="🏪 Centro de Canjeo", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
     async def redeem_button(self, button: Button, interaction: discord.Interaction):
+        items = db.get_shop_items()
+        if not items:
+            await interaction.response.send_message("❌ No hay artículos disponibles por ahora.", ephemeral=True)
+            return
         await interaction.response.send_message("Abriendo el Centro de Canjeo...", view=RedeemMenuView(), ephemeral=True)
-
-    @discord.ui.button(label="💰 Consultar Saldo", style=discord.ButtonStyle.secondary, custom_id="main:check_balance")
-    async def balance_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        balance = db.get_balance(interaction.user.id)
-        await interaction.followup.send(f"Tienes un total de {balance} LBucks. 🪙")
 
 class RedeemMenuView(View):
     def __init__(self):
         super().__init__(timeout=300)
         items = db.get_shop_items()
+        if not items:
+            # Si por alguna razón no hay items, la vista queda vacía (opcional: agregar botón disabled o mensaje)
+            return
         for item_id, price, stock in items:
             robux_amount = item_id.split('_')[0]
             self.add_item(Button(
