@@ -132,7 +132,10 @@ class AdminActionView(View):
 
 @bot.event
 async def on_ready():
+    print("======================================================")
+    print("== ESTA ES LA VERSIÓN MÁS NUEVA DEL CÓDIGO - PRUEBA ==")
     print(f"✅ BOT '{bot.user}' CONECTADO")
+    print("======================================================")
     db.init_db()
     bot.add_view(MainMenuView())
     bot.add_view(AdminActionView()) # Registramos la vista de admin para que sea persistente
