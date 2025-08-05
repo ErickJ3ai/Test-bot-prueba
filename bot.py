@@ -220,6 +220,7 @@ async def add_lbucks(ctx: discord.ApplicationContext, usuario: discord.Member, c
 
 # --- SERVIDOR WEB Y EJECUCIÓN ---
 app = Flask('')
+
 @app.route('/')
 def home():
     return "El bot está vivo."
@@ -228,9 +229,12 @@ def run_web_server():
     serve(app, host="0.0.0.0", port=8080)
 
 def run_bot():
-    web_server_thread = Thread(target=run_web_server)
-    web_server_thread.start()
-    asyncio.run(bot.start(TOKEN))
+    # Registrar vistas persistentes ANTES de ejecutar el bot
+    bot.add_view(MainMenuView())
+    bot.add_view(AdminActionView())
+    bot.run(TOKEN)  # <--- Usar bot.run() y NO asyncio.run()
 
 if __name__ == "__main__":
+    web_server_thread = Thread(target=run_web_server)
+    web_server_thread.start()
     run_bot()
