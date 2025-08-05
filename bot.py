@@ -1,4 +1,5 @@
 import discord
+from discord import Object
 from discord.ext import commands
 from discord.ui import Button, View
 import os
@@ -180,21 +181,18 @@ class AdminActionView(View):
 # --- EVENTOS ---
 @bot.event
 async def on_ready():
-    print(f"✅ BOT '{bot.user}' CONECTADO Y LISTO")
+   print(f"✅ BOT '{bot.user}' CONECTADO Y LISTO")
 
-    # Inicializar base de datos
     db.init_db()
 
-    # Registrar vistas persistentes solo una vez
     if not hasattr(bot, "persistent_views_added"):
         bot.add_view(MainMenuView())
         bot.add_view(AdminActionView())
         bot.persistent_views_added = True
         print("👁️ Vistas persistentes registradas.")
 
-    # Sincronizar comandos slash
     try:
-        synced = await bot.sync_commands(guild_id=GUILD_ID)
+        synced = await bot.tree.sync(guild=Object(id=GUILD_ID))
         print(f"🔄 {len(synced)} comandos sincronizados con el servidor.")
     except Exception as e:
         print(f"⚠️ Error al sincronizar comandos: {e}")
