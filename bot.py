@@ -177,6 +177,9 @@ async def on_ready():
     except Exception as e:
         print(f"⚠️ Error al sincronizar comandos: {e}")
 
+    bot.add_view(MainMenuView())
+    bot.add_view(AdminActionView())
+
 # --- MANEJADOR DE COMPONENTES CON CUSTOM_ID ---
 @bot.listen()
 async def on_interaction(interaction: discord.Interaction):
@@ -220,12 +223,9 @@ def run_web_server():
     serve(app, host="0.0.0.0", port=8080)
 
 def run_bot():
-    # Registrar vistas persistentes ANTES de ejecutar el bot
-    bot.add_view(MainMenuView())
-    bot.add_view(AdminActionView())
-    bot.run(TOKEN)
-
-if __name__ == "__main__":
     web_server_thread = Thread(target=run_web_server)
     web_server_thread.start()
+    asyncio.run(bot.start(TOKEN))
+
+if __name__ == "__main__":
     run_bot()
