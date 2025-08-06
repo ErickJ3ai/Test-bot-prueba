@@ -29,7 +29,13 @@ class MainMenuView(View):
 
     @discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
     async def daily_button(self, button: Button, interaction: discord.Interaction):
+         try:
         await interaction.response.defer(ephemeral=True)
+
+        # Deshabilitar el botón para evitar múltiples clicks
+        button.disabled = True
+        await interaction.edit_original_response(view=self)
+
         user_id = interaction.user.id
         user_data = db.get_user(user_id)
         if user_data is None:
@@ -44,9 +50,16 @@ class MainMenuView(View):
                 minutes, _ = divmod(rem, 60)
                 await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.")
                 return
+
         db.update_lbucks(user_id, 5)
         db.update_daily_claim(user_id)
         await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
+
+    except discord.errors.NotFound:
+        # La interacción ya expiró o fue respondida, solo loguea para monitoreo
+        print(f"Interacción no encontrada para usuario {interaction.user.id} en daily_button")
+    except Exception as e:
+        print(f"Error inesperado en daily_button: {e}")
 
     @discord.ui.button(label="🏪 Centro de Canjeo", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
     async def redeem_button(self, button: Button, interaction: discord.Interaction):
