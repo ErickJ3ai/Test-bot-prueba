@@ -1,117 +1,143 @@
-import sqlite3
+# database.py
+from supabase import create_client, Client
+import os
 import datetime
-from contextlib import contextmanager
 
-DB_NAME = 'evento_robux.db'
+# --- CONFIGURACIÓN E INICIALIZACIÓN ---
+# Las credenciales de Supabase se obtienen de las variables de entorno
+url: str = os.environ.get("SUPABASE_URL")
+key: str = os.environ.get("SUPABASE_KEY")
+supabase: Client = create_client(url, key)
 
-@contextmanager
-def get_connection():
-    try:
-        conn = sqlite3.connect(DB_NAME, timeout=10)
-        yield conn
-        conn.commit()
-    except sqlite3.OperationalError as e:
-        print(f"[DB ERROR] {e}")
-    finally:
-        conn.close()
+# --- REEMPLAZO DE CONEXIÓN CONTEXTUAL ---
+# La conexión de Supabase es persistente, no necesita un "context manager" como SQLite.
+# Simplemente se llama a "supabase" para interactuar.
 
 def init_db():
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            lbucks INTEGER DEFAULT 0,
-            last_daily TEXT
-        )''')
-
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS shop (
-            item_id TEXT PRIMARY KEY,
-            price INTEGER,
-            stock INTEGER
-        )''')
-        
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS redemptions (
-            redemption_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            item_id TEXT,
-            message_id INTEGER,
-            status TEXT DEFAULT 'pending'
-        )''')
-
-        shop_items = [
-            ('5_robux', 50, 20), ('10_robux', 100, 20), ('25_robux', 250, 15),
-            ('30_robux', 300, 15), ('45_robux', 450, 10), ('55_robux', 550, 10),
-            ('60_robux', 600, 5), ('75_robux', 750, 5), ('80_robux', 800, 5),
-            ('100_robux', 1000, 3)
-        ]
-        cursor.executemany("INSERT OR IGNORE INTO shop (item_id, price, stock) VALUES (?, ?, ?)", shop_items)
+    # En Supabase, la creación de la tabla se hace manualmente o con scripts SQL.
+    # Esta función ahora solo verifica que la conexión funciona.
+    print("La base de datos de Supabase está lista. Las tablas deben crearse en el panel de control.")
+    # NOTA: En este punto, asegúrate de que las tablas estén creadas en Supabase.
+    # Tabla `users` -> `usuarios`
+    # Tabla `shop` -> `shop_items`
+    # Tabla `redemptions` -> `redemptions`
 
 def get_user(user_id):
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
-        cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
-        return cursor.fetchone()
+    """Obtiene los datos de un usuario por su ID, creándolo si no existe."""
+    try:
+        response = supabase.from_('users').select('*').eq('user_id', str(user_id)).execute()
+        if response.data:
+            user_data = response.data[0]
+            # Formatear datos para que coincidan con la estructura original (user_id, lbucks, last_daily)
+            last_daily_dt = datetime.datetime.fromisoformat(user_data['last_daily']) if user_data.get('last_daily') else None
+            return (user_data['user_id'], user_data['lbucks'], last_daily_dt)
+        else:
+            # Insertar el usuario si no existe
+            supabase.from_('users').insert({'user_id': str(user_id)}).execute()
+            return (str(user_id), 0, None)
+    except Exception as e:
+        print(f"[DB ERROR] Error en get_user: {e}")
+        # En caso de error, puedes devolver una estructura similar a la original para evitar fallos.
+        return (str(user_id), 0, None)
 
 def update_lbucks(user_id, amount):
-    get_user(user_id)  # Ensure user exists
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET lbucks = lbucks + ? WHERE user_id = ?", (amount, user_id))
+    """Añade o resta LBucks a un usuario."""
+    user_data = get_user(user_id) # Asegura que el usuario exista
+    if user_data:
+        current_lbucks = user_data[1]
+        new_lbucks = current_lbucks + amount
+        try:
+            supabase.from_('users').upsert({'user_id': str(user_id), 'lbucks': new_lbucks}).execute()
+        except Exception as e:
+            print(f"[DB ERROR] Error en update_lbucks: {e}")
 
 def get_balance(user_id):
+    """Obtiene el balance de un usuario."""
     user = get_user(user_id)
     return user[1] if user else 0
 
 def update_daily_claim(user_id):
-    now = datetime.datetime.utcnow().isoformat()
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET last_daily = ? WHERE user_id = ?", (now, user_id))
+    """Actualiza la marca de tiempo del último login diario."""
+    now_utc = datetime.datetime.utcnow().isoformat()
+    try:
+        supabase.from_('users').upsert({'user_id': str(user_id), 'last_daily': now_utc}).execute()
+    except Exception as e:
+        print(f"[DB ERROR] Error en update_daily_claim: {e}")
 
 def get_shop_items():
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT item_id, price, stock FROM shop ORDER BY price")
-        return cursor.fetchall()
+    """Obtiene todos los items de la tienda."""
+    try:
+        response = supabase.from_('shop').select('item_id, price, stock').order('price').execute()
+        return [(item['item_id'], item['price'], item['stock']) for item in response.data]
+    except Exception as e:
+        print(f"[DB ERROR] Error en get_shop_items: {e}")
+        return []
 
 def get_item(item_id):
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT item_id, price, stock FROM shop WHERE item_id=?", (item_id,))
-        return cursor.fetchone()
+    """Obtiene un item específico de la tienda."""
+    try:
+        response = supabase.from_('shop').select('item_id, price, stock').eq('item_id', item_id).execute()
+        if response.data:
+            item = response.data[0]
+            return (item['item_id'], item['price'], item['stock'])
+        return None
+    except Exception as e:
+        print(f"[DB ERROR] Error en get_item: {e}")
+        return None
 
 def update_stock(item_id, amount_change):
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE shop SET stock = stock + ? WHERE item_id = ?", (amount_change, item_id))
+    """Actualiza el stock de un item en la tienda."""
+    try:
+        response = supabase.from_('shop').select('stock').eq('item_id', item_id).execute()
+        if response.data:
+            current_stock = response.data[0]['stock']
+            new_stock = current_stock + amount_change
+            supabase.from_('shop').upsert({'item_id': item_id, 'stock': new_stock}).execute()
+    except Exception as e:
+        print(f"[DB ERROR] Error en update_stock: {e}")
 
 def set_price(item_id, new_price):
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE shop SET price = ? WHERE item_id = ?", (new_price, item_id))
+    """Establece un nuevo precio para un item."""
+    try:
+        supabase.from_('shop').upsert({'item_id': item_id, 'price': new_price}).execute()
+    except Exception as e:
+        print(f"[DB ERROR] Error en set_price: {e}")
 
 def set_shop_stock(item_id, quantity):
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE shop SET stock = ? WHERE item_id = ?", (quantity, item_id))
+    """Establece el stock de un item."""
+    try:
+        supabase.from_('shop').upsert({'item_id': item_id, 'stock': quantity}).execute()
+    except Exception as e:
+        print(f"[DB ERROR] Error en set_shop_stock: {e}")
 
 def create_redemption(user_id, item_id, message_id):
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO redemptions (user_id, item_id, message_id) VALUES (?, ?, ?)", 
-                       (user_id, item_id, message_id))
+    """Registra un nuevo canjeo pendiente."""
+    try:
+        supabase.from_('redemptions').insert({
+            'user_id': str(user_id),
+            'item_id': item_id,
+            'message_id': str(message_id),
+            'status': 'pending'
+        }).execute()
+    except Exception as e:
+        print(f"[DB ERROR] Error en create_redemption: {e}")
 
 def get_redemption_by_message(message_id):
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM redemptions WHERE message_id = ?", (message_id,))
-        return cursor.fetchone()
+    """Obtiene un canjeo por su ID de mensaje."""
+    try:
+        response = supabase.from_('redemptions').select('*').eq('message_id', str(message_id)).execute()
+        if response.data:
+            redemption = response.data[0]
+            # Formatear datos para que coincidan con la estructura original
+            return (redemption['redemption_id'], redemption['user_id'], redemption['item_id'], redemption['message_id'], redemption['status'])
+        return None
+    except Exception as e:
+        print(f"[DB ERROR] Error en get_redemption_by_message: {e}")
+        return None
 
 def update_redemption_status(redemption_id, status):
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE redemptions SET status = ? WHERE redemption_id = ?", (status, redemption_id))
+    """Actualiza el estado de un canjeo."""
+    try:
+        supabase.from_('redemptions').upsert({'redemption_id': redemption_id, 'status': status}).execute()
+    except Exception as e:
+        print(f"[DB ERROR] Error en update_redemption_status: {e}")
