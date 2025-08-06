@@ -5,7 +5,6 @@ from discord.ui import Button, View
 import os
 from dotenv import load_dotenv
 import datetime
-import sqlite3
 from flask import Flask
 from threading import Thread
 from waitress import serve
