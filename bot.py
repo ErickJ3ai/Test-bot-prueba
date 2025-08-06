@@ -27,9 +27,9 @@ class MainMenuView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
-    async def daily_button(self, button: Button, interaction: discord.Interaction):
-         try:
+   @discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
+async def daily_button(self, button: Button, interaction: discord.Interaction):
+    try:
         await interaction.response.defer(ephemeral=True)
 
         # Deshabilitar el botón para evitar múltiples clicks
@@ -56,7 +56,6 @@ class MainMenuView(View):
         await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
 
     except discord.errors.NotFound:
-        # La interacción ya expiró o fue respondida, solo loguea para monitoreo
         print(f"Interacción no encontrada para usuario {interaction.user.id} en daily_button")
     except Exception as e:
         print(f"Error inesperado en daily_button: {e}")
