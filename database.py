@@ -41,15 +41,18 @@ def get_user(user_id):
         return (str(user_id), 0, None)
 
 def update_lbucks(user_id, amount):
-    """Añade o resta LBucks a un usuario."""
-    user_data = get_user(user_id) # Asegura que el usuario exista
-    if user_data:
-        current_lbucks = user_data[1]
+     """Añade o resta LBucks a un usuario."""
+    try:
+        # Obtener el balance actual del usuario
+        response = supabase.from_('users').select('lbucks').eq('user_id', str(user_id)).execute()
+        current_lbucks = response.data[0]['lbucks'] if response.data else 0
         new_lbucks = current_lbucks + amount
-        try:
-            supabase.from_('users').upsert({'user_id': str(user_id), 'lbucks': new_lbucks}).execute()
-        except Exception as e:
-            print(f"[DB ERROR] Error en update_lbucks: {e}")
+        
+        # Actualiza el balance del usuario en una sola operación
+        supabase.from_('users').upsert({'user_id': str(user_id), 'lbucks': new_lbucks}).execute()
+        
+    except Exception as e:
+        print(f"[DB ERROR] Error en update_lbucks: {e}")
 
 def get_balance(user_id):
     try:
