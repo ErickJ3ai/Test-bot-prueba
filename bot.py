@@ -28,41 +28,37 @@ class MainMenuView(View):
 
     @discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
     async def daily_button(self, button: Button, interaction: discord.Interaction):
-        try:
-            await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(ephemeral=True) # Responde inmediatamente para ganar tiempo
 
-            # Deshabilitar el botón para evitar múltiples clicks
-            button.disabled = True
-            await interaction.edit_original_response(view=self)
+        user_id = interaction.user.id
+        user_data = db.get_user(user_id)
+        
+        if user_data is None:
+            await interaction.followup.send("Error al obtener tus datos. Intenta de nuevo.")
+            return
 
-            user_id = interaction.user.id
-            user_data = db.get_user(user_id)
-            if user_data is None:
-                await interaction.followup.send("Error al obtener tus datos. Intenta de nuevo.")
+        # Lógica de verificación de tiempo
+        last_claim_str = user_data[2]
+        if last_claim_str:
+            last_claim_time = datetime.datetime.fromisoformat(last_claim_str)
+            if datetime.datetime.utcnow() - last_claim_time < datetime.timedelta(hours=24):
+                time_left = datetime.timedelta(hours=24) - (datetime.datetime.utcnow() - last_claim_time)
+                hours, rem = divmod(int(time_left.total_seconds()), 3600)
+                minutes, _ = divmod(rem, 60)
+                await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.")
                 return
-            last_claim_str = user_data[2]
-            if last_claim_str:
-                last_claim_time = datetime.datetime.fromisoformat(last_claim_str)
-                if datetime.datetime.utcnow() - last_claim_time < datetime.timedelta(hours=24):
-                    time_left = datetime.timedelta(hours=24) - (datetime.datetime.utcnow() - last_claim_time)
-                    hours, rem = divmod(int(time_left.total_seconds()), 3600)
-                    minutes, _ = divmod(rem, 60)
-                    await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.")
-                    return
 
+        # Si el usuario puede reclamar
+        try:
             db.claim_daily_reward(user_id, 5)
             await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
-
-            # Reactivar el botón después de procesar
-            button.disabled = False
-            await interaction.edit_original_response(view=self)
-
         except Exception as e:
             print(f"Error en daily_button: {e}")
-            try:
-                await interaction.followup.send("Ocurrió un error, intenta de nuevo más tarde.", ephemeral=True)
-            except:
-                pass
+            await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.")
+        
+        # Al final, edita la respuesta original para reactivar el botón.
+        button.disabled = False
+        await interaction.edit_original_response(view=self)
 
 
     @discord.ui.button(label="🏪 Centro de Canjeo", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
