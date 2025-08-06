@@ -50,8 +50,7 @@ class MainMenuView(View):
                     await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.")
                     return
 
-            db.update_lbucks(user_id, 5)
-            db.update_daily_claim(user_id)
+            db.claim_daily_reward(user_id, 5)
             await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
 
             # Reactivar el botón después de procesar
