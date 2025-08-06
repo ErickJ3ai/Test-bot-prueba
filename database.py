@@ -52,9 +52,18 @@ def update_lbucks(user_id, amount):
             print(f"[DB ERROR] Error en update_lbucks: {e}")
 
 def get_balance(user_id):
-    """Obtiene el balance de un usuario."""
-    user = get_user(user_id)
-    return user[1] if user else 0
+    try:
+        # Intenta obtener solo el balance del usuario
+        response = supabase.from_('users').select('lbucks').eq('user_id', str(user_id)).execute()
+        if response.data:
+            return response.data[0]['lbucks']
+        else:
+            # Si el usuario no existe, lo inserta y devuelve el balance por defecto
+            supabase.from_('users').insert({'user_id': str(user_id)}).execute()
+            return 0
+    except Exception as e:
+        print(f"[DB ERROR] Error en get_balance: {e}")
+        return 0
 
 def update_daily_claim(user_id):
     """Actualiza la marca de tiempo del último login diario."""
