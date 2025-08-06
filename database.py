@@ -41,14 +41,13 @@ def get_user(user_id):
         return (str(user_id), 0, None)
 
 def update_lbucks(user_id, amount):
-     """Añade o resta LBucks a un usuario."""
+    """Añade o resta LBucks a un usuario."""
     try:
-        # Obtener el balance actual del usuario
+        # El resto del código está bien indentado
         response = supabase.from_('users').select('lbucks').eq('user_id', str(user_id)).execute()
         current_lbucks = response.data[0]['lbucks'] if response.data else 0
         new_lbucks = current_lbucks + amount
         
-        # Actualiza el balance del usuario en una sola operación
         supabase.from_('users').upsert({'user_id': str(user_id), 'lbucks': new_lbucks}).execute()
         
     except Exception as e:
