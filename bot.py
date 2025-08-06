@@ -26,18 +26,18 @@ class MainMenuView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
-    async def daily_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True) # Responde inmediatamente para ganar tiempo
+    # Código corregido para la función daily_button
+@discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
+async def daily_button(self, button: Button, interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
 
+    try:
         user_id = interaction.user.id
         user_data = db.get_user(user_id)
-        
         if user_data is None:
             await interaction.followup.send("Error al obtener tus datos. Intenta de nuevo.")
             return
 
-        # Lógica de verificación de tiempo
         last_claim_str = user_data[2]
         if last_claim_str:
             last_claim_time = datetime.datetime.fromisoformat(last_claim_str)
@@ -46,17 +46,19 @@ class MainMenuView(View):
                 hours, rem = divmod(int(time_left.total_seconds()), 3600)
                 minutes, _ = divmod(rem, 60)
                 await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.")
+                
+                # Aquí no es necesario editar la respuesta
                 return
 
-        # Si el usuario puede reclamar
-        try:
-            db.claim_daily_reward(user_id, 5)
-            await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
-        except Exception as e:
-            print(f"Error en daily_button: {e}")
-            await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.")
-        
-        # Al final, edita la respuesta original para reactivar el botón.
+        db.claim_daily_reward(user_id, 5)
+        await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
+
+    except Exception as e:
+        print(f"Error en daily_button: {e}")
+        await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.")
+
+    finally:
+        # La vista se edita una sola vez, sin importar si hubo un error o no
         button.disabled = False
         await interaction.edit_original_response(view=self)
 
