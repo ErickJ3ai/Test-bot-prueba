@@ -52,12 +52,6 @@ class MainMenuView(View):
     async def redeem_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.send_message("Abriendo el Centro de Canjeo...", view=RedeemMenuView(), ephemeral=True)
 
-    @discord.ui.button(label="💰 Consultar Saldo", style=discord.ButtonStyle.secondary, custom_id="main:check_balance")
-    async def balance_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        balance = db.get_balance(interaction.user.id)
-        await interaction.followup.send(f"Tienes un total de {balance} LBucks. 🪙")
-
     # Nuevo botón para ver saldo (con label "💵 Ver saldo")
     @discord.ui.button(label="💵 Ver saldo", style=discord.ButtonStyle.secondary, custom_id="main:view_balance")
     async def view_balance_button(self, button: Button, interaction: discord.Interaction):
