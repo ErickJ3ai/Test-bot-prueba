@@ -52,7 +52,29 @@ def update_lbucks(user_id, amount):
         
     except Exception as e:
         print(f"[DB ERROR] Error en update_lbucks: {e}")
-
+        
+def claim_daily_reward(user_id, reward_amount):
+    """
+    Actualiza el balance de LBucks y la marca de tiempo de reclamo diario
+    en una sola operación eficiente.
+    """
+    try:
+        # Obtiene el usuario para saber su balance actual
+        response = supabase.from_('users').select('lbucks').eq('user_id', str(user_id)).execute()
+        current_lbucks = response.data[0]['lbucks'] if response.data else 0
+        new_lbucks = current_lbucks + reward_amount
+        
+        now_utc = datetime.datetime.utcnow().isoformat()
+        
+        # Realiza la actualización del balance y la marca de tiempo en una única operación
+        supabase.from_('users').upsert({
+            'user_id': str(user_id),
+            'lbucks': new_lbucks,
+            'last_daily': now_utc
+        }).execute()
+    except Exception as e:
+        print(f"[DB ERROR] Error en claim_daily_reward: {e}")
+        
 def get_balance(user_id):
     try:
         # Intenta obtener solo el balance del usuario
