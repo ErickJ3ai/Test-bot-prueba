@@ -236,12 +236,21 @@ async def on_interaction(interaction: discord.Interaction):
                 ephemeral=True
             )
 
-# --- COMANDOS SLASH ---
 @bot.slash_command(guild_ids=[GUILD_ID], name="evento", description="Muestra el menú principal del evento.")
 async def evento(ctx: discord.ApplicationContext):
-    await ctx.defer(ephemeral=True)
-    embed = discord.Embed(title="🎉 Evento de Robux Gratis 🎉", description="¡Bienvenido al evento! Usa los botones de abajo.", color=discord.Color.gold())
+    try:
+        await ctx.defer(ephemeral=True)
+    except discord.NotFound:
+        print("⚠️ La interacción ya no es válida (404 Unknown interaction).")
+        return
+
+    embed = discord.Embed(
+        title="🎉 Evento de Robux Gratis 🎉",
+        description="¡Bienvenido al evento! Usa los botones de abajo.",
+        color=discord.Color.gold()
+    )
     await ctx.followup.send(embed=embed, view=MainMenuView())
+
 
 # Nuevo comando para consultar saldo
 @bot.slash_command(guild_ids=[GUILD_ID], name="saldo", description="Consulta tu saldo actual de LBucks.")
