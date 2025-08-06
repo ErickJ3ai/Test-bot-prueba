@@ -196,18 +196,29 @@ class AdminActionView(View):
 @bot.event
 async def on_ready():
     print(f"✅ BOT '{bot.user}' CONECTADO Y LISTO")
-    db.init_db()
-    if not hasattr(bot, "persistent_views_added"):
-        bot.add_view(MainMenuView())
-        bot.add_view(AdminActionView())
-        bot.persistent_views_added = True
-        print("👁️ Vistas persistentes registradas.")
+    
+    try:
+        db.init_db()
+        print("✔️ Base de datos inicializada.")
+    except Exception as e:
+        print(f"⚠️ Error al inicializar la base de datos: {e}")
+
+    try:
+        if not hasattr(bot, "persistent_views_added"):
+            bot.add_view(MainMenuView())
+            bot.add_view(AdminActionView())
+            bot.persistent_views_added = True
+            print("👁️ Vistas persistentes registradas.")
+    except Exception as e:
+        print(f"⚠️ Error al registrar vistas persistentes: {e}")
 
     try:
         synced = await bot.tree.sync(guild=Object(id=GUILD_ID))
         print(f"🔄 {len(synced)} comandos sincronizados con el servidor.")
     except Exception as e:
         print(f"⚠️ Error al sincronizar comandos: {e}")
+
+# ... (el resto de tu código)
 # --- MANEJADOR DE COMPONENTES CON CUSTOM_ID ---
 @bot.listen()
 async def on_interaction(interaction: discord.Interaction):
