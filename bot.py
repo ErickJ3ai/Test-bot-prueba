@@ -25,54 +25,44 @@ bot = discord.Bot(intents=intents)
 class MainMenuView(View):
     def __init__(self):
         super().__init__(timeout=None)
+
     @discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
     async def daily_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         try:
-        user_id = interaction.user.id
-        user_data = db.get_user(user_id)
-        if user_data is None:
-            await interaction.followup.send("Error al obtener tus datos. Intenta de nuevo.")
-            return
-
-        last_claim_str = user_data[2]
-        if last_claim_str:
-            last_claim_time = datetime.datetime.fromisoformat(last_claim_str)
-            if datetime.datetime.utcnow() - last_claim_time < datetime.timedelta(hours=24):
-                time_left = datetime.timedelta(hours=24) - (datetime.datetime.utcnow() - last_claim_time)
-                hours, rem = divmod(int(time_left.total_seconds()), 3600)
-                minutes, _ = divmod(rem, 60)
-                await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.")
-                
-                # Aquí no es necesario editar la respuesta
+            user_id = interaction.user.id
+            user_data = db.get_user(user_id)
+            if user_data is None:
+                await interaction.followup.send("Error al obtener tus datos. Intenta de nuevo.")
                 return
-                db.claim_daily_reward(user_id, 5)
-                await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
 
-    except Exception as e:
-        print(f"Error en daily_button: {e}")
-        await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.")
+            last_claim_str = user_data[2]
+            if last_claim_str:
+                last_claim_time = datetime.datetime.fromisoformat(last_claim_str)
+                if datetime.datetime.utcnow() - last_claim_time < datetime.timedelta(hours=24):
+                    time_left = datetime.timedelta(hours=24) - (datetime.datetime.utcnow() - last_claim_time)
+                    hours, rem = divmod(int(time_left.total_seconds()), 3600)
+                    minutes, _ = divmod(rem, 60)
+                    await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.")
+                    return
 
-    finally:
-        # La vista se edita una sola vez, sin importar si hubo un error o no
-        button.disabled = False
-        await interaction.edit_original_response(view=self)
-        
+            db.claim_daily_reward(user_id, 5)
+            await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
+
+        except Exception as e:
+            print(f"Error en daily_button: {e}")
+            await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.")
+
     @discord.ui.button(label="🏪 Centro de Canjeo", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
     async def redeem_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.send_message("Abriendo el Centro de Canjeo...", view=RedeemMenuView(), ephemeral=True)
 
-   # Código corregido para la función view_balance_button
     @discord.ui.button(label="💵 Ver saldo", style=discord.ButtonStyle.secondary, custom_id="main:view_balance")
-async def view_balance_button(self, button: Button, interaction: discord.Interaction):
-    # El defer se ejecuta de inmediato.
-    await interaction.response.defer(ephemeral=True)
-    
-    # La consulta a la base de datos se hace después del defer.
-    balance = db.get_balance(interaction.user.id)
-    
-    # El mensaje de seguimiento se envía una vez que la consulta haya terminado.
-    await interaction.followup.send(f"Tu saldo actual es: **{balance} LBucks** 🪙")
+    async def view_balance_button(self, button: Button, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        balance = db.get_balance(interaction.user.id)
+        await interaction.followup.send(f"Tu saldo actual es: **{balance} LBucks** 🪙")
+
 
 class RedeemMenuView(View):
     def __init__(self):
