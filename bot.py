@@ -27,7 +27,7 @@ class MainMenuView(View):
         super().__init__(timeout=None)
 
     @discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
-async def daily_button(self, button: Button, interaction: discord.Interaction):
+    async def daily_button(self, button: Button, interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     try:
         user_id = interaction.user.id
