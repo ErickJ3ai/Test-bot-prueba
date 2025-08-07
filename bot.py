@@ -270,12 +270,26 @@ async def saldo(ctx: discord.ApplicationContext):
 
 admin_commands = bot.create_group("admin", "Comandos de administración", guild_ids=[GUILD_ID])
 
+# Código corregido para la función add_lbucks
 @admin_commands.command(name="add_lbucks", description="Añade LBucks a un usuario.")
 @discord.default_permissions(administrator=True)
 async def add_lbucks(ctx: discord.ApplicationContext, usuario: discord.Member, cantidad: int):
+    # Obtener el rol de administrador del servidor
+    admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
+    
+    # Verificar si el usuario tiene el rol de administrador o si tiene permisos de administrador
+    if admin_role not in ctx.author.roles and not ctx.author.guild_permissions.administrator:
+        return await ctx.respond("No tienes los permisos necesarios para usar este comando.", ephemeral=True)
+    
+    # Verificar si el usuario tiene permisos de administrador de forma explícita
+    if not ctx.author.guild_permissions.administrator:
+        return await ctx.respond("No tienes los permisos necesarios para usar este comando.", ephemeral=True)
+
     await ctx.defer(ephemeral=True)
+    
+    # El resto de tu lógica para añadir los LBucks
     db.update_lbucks(usuario.id, cantidad)
-    await ctx.followup.send(f"Se han añadido {cantidad} LBucks a {usuario.mention}.")
+    await ctx.followup.send(f"Se han añadido {cantidad} LBucks a {usuario.mention}.", ephemeral=True)
 
 # --- SERVIDOR WEB Y EJECUCIÓN ---
 app = Flask('')
