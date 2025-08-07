@@ -79,7 +79,10 @@ class MainMenuView(View):
         await interaction.response.send_modal(modal)
 
 # Fuera de las clases View, añade esta nueva clase
-class DonateModal(discord.ui.Modal, title="Donar LBucks"):
+class DonateModal(discord.ui.Modal):
+    def __init__(self):
+        super().__init__(title="Donar LBucks")
+
     amount_input = discord.ui.InputText(
         label="Cantidad de LBucks",
         placeholder="Introduce la cantidad a donar",
