@@ -25,13 +25,10 @@ bot = discord.Bot(intents=intents)
 class MainMenuView(View):
     def __init__(self):
         super().__init__(timeout=None)
-
-    # Código corregido para la función daily_button
-@discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
-async def daily_button(self, button: Button, interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-
-    try:
+    @discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
+    async def daily_button(self, button: Button, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        try:
         user_id = interaction.user.id
         user_data = db.get_user(user_id)
         if user_data is None:
@@ -49,9 +46,8 @@ async def daily_button(self, button: Button, interaction: discord.Interaction):
                 
                 # Aquí no es necesario editar la respuesta
                 return
-
-        db.claim_daily_reward(user_id, 5)
-        await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
+                db.claim_daily_reward(user_id, 5)
+                await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
 
     except Exception as e:
         print(f"Error en daily_button: {e}")
@@ -61,14 +57,13 @@ async def daily_button(self, button: Button, interaction: discord.Interaction):
         # La vista se edita una sola vez, sin importar si hubo un error o no
         button.disabled = False
         await interaction.edit_original_response(view=self)
-
-
+        
     @discord.ui.button(label="🏪 Centro de Canjeo", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
     async def redeem_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.send_message("Abriendo el Centro de Canjeo...", view=RedeemMenuView(), ephemeral=True)
 
    # Código corregido para la función view_balance_button
-@discord.ui.button(label="💵 Ver saldo", style=discord.ButtonStyle.secondary, custom_id="main:view_balance")
+    @discord.ui.button(label="💵 Ver saldo", style=discord.ButtonStyle.secondary, custom_id="main:view_balance")
 async def view_balance_button(self, button: Button, interaction: discord.Interaction):
     # El defer se ejecuta de inmediato.
     await interaction.response.defer(ephemeral=True)
