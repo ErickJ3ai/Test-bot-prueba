@@ -38,30 +38,29 @@ class MainMenuView(View):
 
             last_claim_time = user_data[2]
 
-        # Si viene como string, lo convertimos
-        if isinstance(last_claim_time, str):
-            try:
-                last_claim_time = datetime.datetime.fromisoformat(last_claim_time)
-            except ValueError:
-                last_claim_time = None
+            # Si viene como string, lo convertimos
+            if isinstance(last_claim_time, str):
+                try:
+                    last_claim_time = datetime.datetime.fromisoformat(last_claim_time)
+                except ValueError:
+                    last_claim_time = None
 
-        # Si ya reclamó en las últimas 24h
-        if isinstance(last_claim_time, datetime.datetime):
-            if datetime.datetime.utcnow() - last_claim_time < datetime.timedelta(hours=24):
-                time_left = datetime.timedelta(hours=24) - (datetime.datetime.utcnow() - last_claim_time)
-                hours, rem = divmod(int(time_left.total_seconds()), 3600)
-                minutes, _ = divmod(rem, 60)
-                await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.")
-                return
+            # Si ya reclamó en las últimas 24h
+            if isinstance(last_claim_time, datetime.datetime):
+                if datetime.datetime.utcnow() - last_claim_time < datetime.timedelta(hours=24):
+                    time_left = datetime.timedelta(hours=24) - (datetime.datetime.utcnow() - last_claim_time)
+                    hours, rem = divmod(int(time_left.total_seconds()), 3600)
+                    minutes, _ = divmod(rem, 60)
+                    await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.")
+                    return
 
-        # Dar recompensa y actualizar DB
-        db.claim_daily_reward(user_id, 5)
-        await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
+            # Dar recompensa y actualizar DB
+            db.claim_daily_reward(user_id, 5)
+            await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
 
-    except Exception as e:
-        print(f"Error en daily_button: {e}")
-        await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.")
-
+        except Exception as e:
+            print(f"Error en daily_button: {e}")
+            await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.")
 
 
     @discord.ui.button(label="🏪 Centro de Canjeo", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
@@ -294,3 +293,4 @@ if __name__ == "__main__":
     web_server_thread = Thread(target=run_web_server)
     web_server_thread.start()
     run_bot()
+
