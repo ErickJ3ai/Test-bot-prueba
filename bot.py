@@ -72,8 +72,68 @@ class MainMenuView(View):
         await interaction.response.defer(ephemeral=True)
         balance = db.get_balance(interaction.user.id)
         await interaction.followup.send(f"Tu saldo actual es: **{balance} LBucks** 🪙")
+    
+    @discord.ui.button(label="🎁 Donar", style=discord.ButtonStyle.secondary, custom_id="main:donate_lbucks")
+    async def donate_button(self, button: Button, interaction: discord.Interaction):
+        modal = DonateModal()
+        await interaction.response.send_modal(modal)
 
+# Fuera de las clases View, añade esta nueva clase
+class DonateModal(discord.ui.Modal, title="Donar LBucks"):
+    amount_input = discord.ui.InputText(
+        label="Cantidad de LBucks",
+        placeholder="Introduce la cantidad a donar",
+        min_length=1,
+        max_length=10,
+        style=discord.InputTextStyle.short
+    )
+    recipient_input = discord.ui.InputText(
+        label="Destinatario (ID o nombre de usuario)",
+        placeholder="Introduce el ID o nombre de usuario de la persona",
+        min_length=1,
+        max_length=32,
+        style=discord.InputTextStyle.short
+    )
 
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            # Lógica de donación
+            amount = int(self.amount_input.value)
+            recipient_str = self.recipient_input.value
+
+            # Obtener el objeto del miembro (usuario)
+            if recipient_str.isdigit():
+                recipient = await bot.fetch_user(int(recipient_str))
+            else:
+                recipient = discord.utils.get(interaction.guild.members, name=recipient_str)
+
+            if recipient is None:
+                await interaction.followup.send("No se pudo encontrar al destinatario.")
+                return
+
+            if amount <= 0:
+                await interaction.followup.send("La cantidad a donar debe ser un número positivo.")
+                return
+
+            doner_balance = db.get_balance(interaction.user.id)
+            if doner_balance < amount:
+                await interaction.followup.send("No tienes suficientes LBucks para donar.")
+                return
+            
+            # Restar del donante
+            db.update_lbucks(interaction.user.id, -amount)
+            # Sumar al destinatario
+            db.update_lbucks(recipient.id, amount)
+            
+            await interaction.followup.send(f"Has donado **{amount} LBucks** a **{recipient.name}**. ¡Gracias por tu generosidad! 🎉")
+
+        except ValueError:
+            await interaction.followup.send("La cantidad debe ser un número válido.")
+        except Exception as e:
+            print(f"Error en el modal de donación: {e}")
+            await interaction.followup.send("Ocurrió un error al procesar tu donación. Intenta de nuevo más tarde.")
+            
 class RedeemMenuView(View):
     def __init__(self):
         super().__init__(timeout=300)
@@ -186,6 +246,7 @@ class AdminActionView(View):
         edited_embed.color = discord.Color.dark_grey()
         edited_embed.add_field(name="Cancelado por", value=interaction.user.mention, inline=False)
         await interaction.edit_original_response(embed=edited_embed, view=None)
+
 
 # --- EVENTOS ---
 @bot.event
