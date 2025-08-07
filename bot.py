@@ -26,16 +26,17 @@ class MainMenuView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
-    async def daily_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        try:
-            user_id = interaction.user.id
-            user_data = db.get_user(user_id)
-            if user_data is None:
-                await interaction.followup.send("Error al obtener tus datos. Intenta de nuevo.")
-                return
-            last_claim_time = user_data[2]
+   @discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
+async def daily_button(self, button: Button, interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    try:
+        user_id = interaction.user.id
+        user_data = db.get_user(user_id)
+        if user_data is None:
+            await interaction.followup.send("Error al obtener tus datos. Intenta de nuevo.")
+            return
+
+        last_claim_time = user_data[2]
 
         # Si viene como string, lo convertimos
         if isinstance(last_claim_time, str):
@@ -60,6 +61,7 @@ class MainMenuView(View):
     except Exception as e:
         print(f"Error en daily_button: {e}")
         await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.")
+
 
 
     @discord.ui.button(label="🏪 Centro de Canjeo", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
