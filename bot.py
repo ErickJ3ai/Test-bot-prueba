@@ -277,17 +277,13 @@ async def add_lbucks(ctx: discord.ApplicationContext, usuario: discord.Member, c
     # Obtener el rol de administrador del servidor
     admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
     
-    # Verificar si el usuario tiene el rol de administrador o si tiene permisos de administrador
-    if admin_role not in ctx.author.roles and not ctx.author.guild_permissions.administrator:
-        return await ctx.respond("No tienes los permisos necesarios para usar este comando.", ephemeral=True)
+    # Si el rol no existe o el usuario no lo tiene, denegar el permiso
+    if admin_role is None or admin_role not in ctx.author.roles:
+        return await ctx.respond("No tienes el rol de administrador para usar este comando.", ephemeral=True)
     
-    # Verificar si el usuario tiene permisos de administrador de forma explícita
-    if not ctx.author.guild_permissions.administrator:
-        return await ctx.respond("No tienes los permisos necesarios para usar este comando.", ephemeral=True)
-
     await ctx.defer(ephemeral=True)
     
-    # El resto de tu lógica para añadir los LBucks
+    # ... El resto de tu lógica ...
     db.update_lbucks(usuario.id, cantidad)
     await ctx.followup.send(f"Se han añadido {cantidad} LBucks a {usuario.mention}.", ephemeral=True)
 
