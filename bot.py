@@ -364,27 +364,21 @@ async def mission_voice_tracker(member, before, after):
         # Pero para una misión simple, podemos asumir el progreso
         db.update_mission_progress(member.id, "voice_minutes", progress_increase=1)
 
+# Código corregido para la función evento
 @bot.slash_command(guild_ids=[GUILD_ID], name="evento", description="Muestra el menú principal del evento.")
 async def evento(ctx: discord.ApplicationContext):
-    try:
-        await ctx.defer(ephemeral=True)
-    except discord.NotFound:
-        print("⚠️ La interacción ya no es válida (404 Unknown interaction).")
-        return
+    # La respuesta inicial se envía de forma robusta
+    await ctx.defer(ephemeral=True)
 
-    # --- Aquí está el código mejorado para el embed ---
     embed = discord.Embed(
         title="🎉 ¡𝑩𝒊𝒆𝒏𝒗𝒆𝒏𝒊𝒅𝒐 𝒂𝒍 𝑬𝒗𝒆𝒏𝒕𝒐 𝒅𝒆 𝑹𝒐𝒃𝒖𝒙 𝑷𝒓𝒐𝒑𝒐𝒓𝒄𝒊𝒐𝒏𝒂𝒅𝒐 𝒑𝒐𝒓 𝑳𝒆𝒈𝒆𝒏𝒅𝒔 𝑨𝒄𝒄𝒐𝒖𝒏𝒕! 🎉",
-        description="¡𝑷𝒂𝒓𝒕𝒊𝒄𝒊𝒑𝒂 𝒑𝒂𝒓𝒂 𝒈𝒂𝒏𝒂𝒓 𝑹𝒐𝒃𝒖𝒙 𝒈𝒓𝒂𝒕𝒊𝒔! 𝑼𝒔𝒂 𝒍𝒐𝒔 𝒃𝒐𝒕𝒐𝒏𝒆𝒔 𝒅𝒆 𝒂𝒃𝒂𝒋𝒐 𝒑𝒂𝒓𝒂 𝒊𝒏𝒕𝒆𝒓𝒂𝒄𝒕𝒖𝒂𝒓 𝒚 𝒄𝒐𝒎𝒆𝒏𝒛𝒂𝒓 𝒕𝒖 𝒂𝒗𝒆𝒏𝒕𝒖𝒓𝒂. ¡𝑴𝒖𝒄𝒉𝒂 𝒔𝒖𝒆𝒓𝒕𝒆!",
-        color=discord.Color.gold() # Puedes probar otros colores como discord.Color.orange()
+        description="𝑷𝒂𝒓𝒕𝒊𝒄𝒊𝒑𝒂 𝒑𝒂𝒓𝒂 𝒈𝒂𝒏𝒂𝒓 𝑹𝒐𝒃𝒖𝒙 𝒈𝒓𝒂𝒕𝒊𝒔! 𝑼𝒔𝒂 𝒍𝒐𝒔 𝒃𝒐𝒕𝒐𝒏𝒆𝒔 𝒅𝒆 𝒂𝒃𝒂𝒋𝒐 𝒑𝒂𝒓𝒂 𝒊𝒏𝒕𝒆𝒓𝒂𝒄𝒕𝒖𝒂𝒓 𝒚 𝒄𝒐𝒎𝒆𝒏𝒛𝒂𝒓 𝒕𝒖 𝒂𝒗𝒆𝒏𝒕𝒖𝒓𝒂. ¡𝑴𝒖𝒄𝒉𝒂 𝒔𝒖𝒆𝒓𝒕𝒆!",
+        color=discord.Color.gold()
     )
     
-    # --- Cambio aquí: usar el icono del servidor ---
     if ctx.guild.icon:
         embed.set_thumbnail(url=ctx.guild.icon.url)
-    # ------------------------------------------------
     
-    # Agregar campos para organizar la información
     embed.add_field(
         name="☀️ Login Diario",
         value="Reclama 5 LBucks cada 24 horas. ¡Es la forma más fácil de ganar!",
@@ -405,9 +399,15 @@ async def evento(ctx: discord.ApplicationContext):
         value="Comparte tu riqueza. Dona LBucks a otros usuarios del servidor.",
         inline=False
     )
+    embed.add_field(
+        name="📝 Misiones",
+        value="Completa misiones diarias para ganar recompensas adicionales.",
+        inline=False
+    )
 
     embed.set_footer(text="¡Gracias por participar en nuestro evento!")
     
+    # Se envía una única respuesta de seguimiento
     await ctx.followup.send(embed=embed, view=MainMenuView())
 
 
