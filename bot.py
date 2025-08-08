@@ -26,79 +26,86 @@ class MainMenuView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="☀️ 𝐋𝐨𝐠𝐢𝐧 𝐃𝐢𝐚𝐫𝐢𝐨", style=discord.ButtonStyle.success, custom_id="main:daily_login")
-    async def daily_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        try:
-            user_id = interaction.user.id
-            user_data = db.get_user(user_id)
-            
-            if user_data is None:
-                await interaction.followup.send("Error al obtener tus datos. Intenta de nuevo.")
-                return
-
-            last_claim_time = user_data[2]
-            
-            if isinstance(last_claim_time, str):
-                try:
-                    last_claim_time = datetime.datetime.fromisoformat(last_claim_time)
-                except ValueError:
-                    last_claim_time = None
-
-            if isinstance(last_claim_time, datetime.datetime) and (datetime.datetime.utcnow() - last_claim_time < datetime.timedelta(hours=24)):
-                time_left = datetime.timedelta(hours=24) - (datetime.datetime.utcnow() - last_claim_time)
-                hours, rem = divmod(int(time_left.total_seconds()), 3600)
-                minutes, _ = divmod(rem, 60)
-                await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.", ephemeral=True)
-                return
-
-            db.claim_daily_reward(user_id, 5)
-            await interaction.followup.send("¡Has recibido 5 LBucks! 🪙", ephemeral=True)
-
-        except Exception as e:
-            print(f"Error en daily_button: {e}")
-            await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.", ephemeral=True)
-
-    @discord.ui.button(label="🏪 𝐂𝐞𝐧𝐭𝐫𝐨 𝐝𝐞 𝐂𝐚𝐧𝐣𝐞𝐨", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
-    async def redeem_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.send_message("Abriendo el Centro de Canjeo...", view=RedeemMenuView(), ephemeral=True)
-
-    @discord.ui.button(label="💵 𝐕𝐞𝐫 𝐬𝐚𝐥𝐝𝐨", style=discord.ButtonStyle.secondary, custom_id="main:view_balance")
-    async def view_balance_button(self, button: Button, interaction: discord.Interaction):
-        balance = db.get_balance(interaction.user.id)
-        await interaction.response.send_message(f"Tu saldo actual es: **{balance} LBucks** 🪙", ephemeral=True)
-    
-    @discord.ui.button(label="🎁 𝐃𝐨𝐧𝐚𝐫", style=discord.ButtonStyle.secondary, custom_id="main:donate_lbucks")
-    async def donate_button(self, button: Button, interaction: discord.Interaction):
-        modal = DonateModal()
-        await interaction.response.send_modal(modal)
-
-    @discord.ui.button(label="📝 Misiones", style=discord.ButtonStyle.secondary, custom_id="main:missions")
-    async def missions_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+    # Dentro de la clase MainMenuView, después de init
+@discord.ui.button(label="☀️ 𝐋𝐨𝐠𝐢𝐧 𝐃𝐢𝐚𝐫𝐢𝐨", style=discord.ButtonStyle.success, custom_id="main:daily_login")
+async def daily_button(self, button: Button, interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    try:
+        user_id = interaction.user.id
+        # Llamada asíncrona a la base de datos
+        user_data = await asyncio.to_thread(db.get_user, user_id)
         
-        missions = db.get_daily_missions(interaction.user.id)
-        if not missions:
-            await interaction.followup.send("No hay misiones disponibles en este momento. Inténtalo más tarde.", ephemeral=True)
+        if user_data is None:
+            await interaction.followup.send("Error al obtener tus datos. Intenta de nuevo.")
             return
-            
-        embed = discord.Embed(
-            title="📝 Tus Misiones Diarias",
-            description="Completa estas misiones para ganar LBucks.",
-            color=discord.Color.blue()
+        
+        last_claim_time = user_data[2]
+        
+        if isinstance(last_claim_time, str):
+            try:
+                last_claim_time = datetime.datetime.fromisoformat(last_claim_time)
+            except ValueError:
+                last_claim_time = None
+
+        if isinstance(last_claim_time, datetime.datetime) and (datetime.datetime.utcnow() - last_claim_time < datetime.timedelta(hours=24)):
+            time_left = datetime.timedelta(hours=24) - (datetime.datetime.utcnow() - last_claim_time)
+            hours, rem = divmod(int(time_left.total_seconds()), 3600)
+            minutes, _ = divmod(rem, 60)
+            await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.")
+            return
+
+        # Llamada asíncrona a la base de datos
+        await asyncio.to_thread(db.claim_daily_reward, user_id, 5)
+        await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
+
+    except Exception as e:
+        print(f"Error en daily_button: {e}")
+        await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.")
+
+@discord.ui.button(label="🏪 𝐂𝐞𝐧𝐭𝐫𝐨 𝐝𝐞 𝐂𝐚𝐧𝐣𝐞𝐨", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
+async def redeem_button(self, button: Button, interaction: discord.Interaction):
+    # La llamada a get_shop_items es asíncrona
+    items = await asyncio.to_thread(db.get_shop_items) or []
+    await interaction.response.send_message("Abriendo el Centro de Canjeo...", view=RedeemMenuView(items), ephemeral=True)
+
+@discord.ui.button(label="💵 𝐕𝐞𝐫 𝐬𝐚𝐥𝐝𝐨", style=discord.ButtonStyle.secondary, custom_id="main:view_balance")
+async def view_balance_button(self, button: Button, interaction: discord.Interaction):
+    # Llamada asíncrona a la base de datos
+    balance = await asyncio.to_thread(db.get_balance, interaction.user.id)
+    await interaction.response.send_message(f"Tu saldo actual es: **{balance} LBucks** 🪙", ephemeral=True)
+    
+@discord.ui.button(label="🎁 𝐃𝐨𝐧𝐚𝐫", style=discord.ButtonStyle.secondary, custom_id="main:donate_lbucks")
+async def donate_button(self, button: Button, interaction: discord.Interaction):
+    modal = DonateModal()
+    await interaction.response.send_modal(modal)
+
+@discord.ui.button(label="📝 𝐌𝐢𝐬𝐢𝐨𝐧𝐞𝐬", style=discord.ButtonStyle.secondary, custom_id="main:missions")
+async def missions_button(self, button: Button, interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    
+    # Llamada asíncrona a la base de datos
+    missions = await asyncio.to_thread(db.get_daily_missions, interaction.user.id)
+    if not missions:
+        await interaction.followup.send("No hay misiones disponibles en este momento. Inténtalo más tarde.", ephemeral=True)
+        return
+        
+    embed = discord.Embed(
+        title="📝 Tus Misiones Diarias",
+        description="Completa estas misiones para ganar LBucks.",
+        color=discord.Color.blue()
+    )
+    
+    for m in missions:
+        status_emoji = "✅" if m['is_completed'] else "⌛"
+        progress_text = f"({m['progress']}/{m['target_value']})" if not m['is_completed'] else ""
+        
+        embed.add_field(
+            name=f"{status_emoji} {m['description']}",
+            value=f"Recompensa: **{m['reward']} LBucks** {progress_text}",
+            inline=False
         )
         
-        for m in missions:
-            status_emoji = "✅" if m['is_completed'] else "⌛"
-            progress_text = f"({m['progress']}/{m['target_value']})" if not m['is_completed'] else ""
-            
-            embed.add_field(
-                name=f"{status_emoji} {m['description']}",
-                value=f"Recompensa: **{m['reward']} LBucks** {progress_text}",
-                inline=False
-            )
-            
-        await interaction.followup.send(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 # Fuera de las clases View, añade esta nueva clase
 class DonateModal(discord.ui.Modal):
