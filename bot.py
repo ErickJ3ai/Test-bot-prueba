@@ -283,17 +283,18 @@ class AdminActionView(View):
 async def on_ready():
     print(f"✅ BOT '{bot.user}' CONECTADO Y LISTO")
     
-    # ... (El resto del código de on_ready) ...
-    
-    # Creamos una única instancia de la vista
-    bot.main_menu_view = MainMenuView()
-    
-    # Registramos la vista para que el bot la reconozca después de reinicios
-    if not hasattr(bot, "persistent_views_added"):
-        bot.add_view(bot.main_menu_view)
-        bot.add_view(AdminActionView())
-        bot.persistent_views_added = True
-        print("👁️ Vistas persistentes registradas.")
+    try:
+        db.init_db()
+        print("✔️ Base de datos inicializada.")
+    except Exception as e:
+        print(f"⚠️ Error al inicializar la base de datos: {e}")
+
+    try:
+        if not hasattr(bot, "persistent_views_added"):
+            bot.add_view(bot.main_menu_view)
+            bot.add_view(AdminActionView())
+            bot.persistent_views_added = True
+            print("👁️ Vistas persistentes registradas.")
     except Exception as e:
         print(f"⚠️ Error al registrar vistas persistentes: {e}")
 
