@@ -316,27 +316,28 @@ async def on_interaction(interaction: discord.Interaction):
             return
 
         if custom_id.startswith("redeem_"):
-            # Evitar respuesta doble
             if interaction.response.is_done():
                 return
 
             item_id = custom_id.replace("redeem_", "")
-            item = db.get_item(item_id)
+            
+            # Llamada asíncrona a la base de datos
+            item = await asyncio.to_thread(db.get_item, item_id)
 
             try:
                 if not item:
-                    await interaction.response.send_message(
-                        "Este item ya no existe.", ephemeral=True
-                    )
+                    await interaction.response.send_message("Este item ya no existe.", ephemeral=True)
                     return
 
                 # 🔹 Desactivar todos los botones
-                if hasattr(interaction.message, "components"):
-                    for row in interaction.message.components:
-                        for component in row.children:
-                            component.disabled = True
+                # Se crea una nueva vista con los botones existentes
+                original_view = View()
+                for row in interaction.message.components:
+                    for component in row.children:
+                        component.disabled = True
+                        original_view.add_item(component)
 
-                    await interaction.message.edit(view=interaction.message.components)
+                await interaction.message.edit(view=original_view)
 
                 # 🔹 Eliminar el mensaje después de 5 segundos
                 async def delete_later(msg):
