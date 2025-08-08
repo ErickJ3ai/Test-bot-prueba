@@ -26,43 +26,39 @@ class MainMenuView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-   # Código corregido para la función daily_button
-@discord.ui.button(label="☀️ 𝐋𝐨𝐠𝐢𝐧 𝐃𝐢𝐚𝐫𝐢𝐨", style=discord.ButtonStyle.success, custom_id="main:daily_login")
-async def daily_button(self, button: Button, interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
+    @discord.ui.button(label="☀️ 𝐋𝐨𝐠𝐢𝐧 𝐃𝐢𝐚𝐫𝐢𝐨", style=discord.ButtonStyle.success, custom_id="main:daily_login")
+    async def daily_button(self, button: Button, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            user_id = interaction.user.id
+            user_data = db.get_user(user_id)
+            
+            if user_data is None:
+                await interaction.followup.send("Error al obtener tus datos. Intenta de nuevo.")
+                return
 
-    try:
-        user_id = interaction.user.id
-        user_data = db.get_user(user_id)
-        
-        if user_data is None:
-            await interaction.followup.send("Error al obtener tus datos. Intenta de nuevo.")
-            return
+            last_claim_time = user_data[2]
+            
+            if isinstance(last_claim_time, str):
+                try:
+                    last_claim_time = datetime.datetime.fromisoformat(last_claim_time)
+                except ValueError:
+                    last_claim_time = None
 
-        last_claim_time = user_data[2]
-        
-        if isinstance(last_claim_time, str):
-            try:
-                last_claim_time = datetime.datetime.fromisoformat(last_claim_time)
-            except ValueError:
-                last_claim_time = None
+            if isinstance(last_claim_time, datetime.datetime) and (datetime.datetime.utcnow() - last_claim_time < datetime.timedelta(hours=24)):
+                time_left = datetime.timedelta(hours=24) - (datetime.datetime.utcnow() - last_claim_time)
+                hours, rem = divmod(int(time_left.total_seconds()), 3600)
+                minutes, _ = divmod(rem, 60)
+                await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.")
+                return
 
-        if isinstance(last_claim_time, datetime.datetime) and (datetime.datetime.utcnow() - last_claim_time < datetime.timedelta(hours=24)):
-            time_left = datetime.timedelta(hours=24) - (datetime.datetime.utcnow() - last_claim_time)
-            hours, rem = divmod(int(time_left.total_seconds()), 3600)
-            minutes, _ = divmod(rem, 60)
-            await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.")
-            return
+            db.claim_daily_reward(user_id, 5)
+            await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
 
-        db.claim_daily_reward(user_id, 5)
-        await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
+        except Exception as e:
+            print(f"Error en daily_button: {e}")
+            await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.")
 
-    except Exception as e:
-        print(f"Error en daily_button: {e}")
-        await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.")
-
-
-    # Código corregido para la función redeem_button
     @discord.ui.button(label="🏪 𝐂𝐞𝐧𝐭𝐫𝐨 𝐝𝐞 𝐂𝐚𝐧𝐣𝐞𝐨", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
     async def redeem_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.send_message("Abriendo el Centro de Canjeo...", view=RedeemMenuView(), ephemeral=True)
@@ -77,8 +73,8 @@ async def daily_button(self, button: Button, interaction: discord.Interaction):
         modal = DonateModal()
         await interaction.response.send_modal(modal)
 
-   @discord.ui.button(label="📝 𝐌𝐢𝐬𝐢𝐨𝐧𝐞𝐬", style=discord.ButtonStyle.secondary, custom_id="main:missions")
-   async def missions_button(self, button: Button, interaction: discord.Interaction):
+    @discord.ui.button(label="📝 Misiones", style=discord.ButtonStyle.secondary, custom_id="main:missions")
+    async def missions_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
         missions = db.get_daily_missions(interaction.user.id)
