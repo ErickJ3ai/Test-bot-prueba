@@ -60,7 +60,7 @@ class MainMenuView(View):
             await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.", ephemeral=True)
 
     @discord.ui.button(label="🏪 𝐂𝐞𝐧𝐭𝐫𝐨 𝐝𝐞 𝐂𝐚𝐧𝐣𝐞𝐨", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
-async def redeem_button(self, button: Button, interaction: discord.Interaction):
+    async def redeem_button(self, button: Button, interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     # Llamada asíncrona a la base de datos
     items = await asyncio.to_thread(db.get_shop_items) or []
