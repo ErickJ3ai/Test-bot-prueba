@@ -26,7 +26,7 @@ class MainMenuView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
+    @discord.ui.button(label="☀️ 𝐋𝐨𝐠𝐢𝐧 𝐃𝐢𝐚𝐫𝐢𝐨", style=discord.ButtonStyle.success, custom_id="main:daily_login")
     async def daily_button(self, button: Button, interaction: discord.Interaction):
         # La respuesta inicial se envía aquí.
         await interaction.response.defer(ephemeral=True)
@@ -64,17 +64,17 @@ class MainMenuView(View):
             await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.")
 
 
-    @discord.ui.button(label="🏪 Centro de Canjeo", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
+    @discord.ui.button(label="🏪 𝐂𝐞𝐧𝐭𝐫𝐨 𝐝𝐞 𝐂𝐚𝐧𝐣𝐞𝐨", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
     async def redeem_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.send_message("Abriendo el Centro de Canjeo...", view=RedeemMenuView(), ephemeral=True)
 
-    @discord.ui.button(label="💵 Ver saldo", style=discord.ButtonStyle.secondary, custom_id="main:view_balance")
+    @discord.ui.button(label="💵 𝐕𝐞𝐫 𝐬𝐚𝐥𝐝𝐨", style=discord.ButtonStyle.secondary, custom_id="main:view_balance")
     async def view_balance_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         balance = db.get_balance(interaction.user.id)
         await interaction.followup.send(f"Tu saldo actual es: **{balance} LBucks** 🪙")
     
-    @discord.ui.button(label="🎁 Donar", style=discord.ButtonStyle.secondary, custom_id="main:donate_lbucks")
+    @discord.ui.button(label="🎁 𝐃𝐨𝐧𝐚𝐫", style=discord.ButtonStyle.secondary, custom_id="main:donate_lbucks")
     async def donate_button(self, button: Button, interaction: discord.Interaction):
         modal = DonateModal()
         await interaction.response.send_modal(modal)
@@ -309,11 +309,42 @@ async def evento(ctx: discord.ApplicationContext):
         print("⚠️ La interacción ya no es válida (404 Unknown interaction).")
         return
 
+    # --- Aquí está el código mejorado para el embed ---
     embed = discord.Embed(
-        title="🎉 Evento de Robux Gratis 🎉",
-        description="¡Bienvenido al evento! Usa los botones de abajo.",
-        color=discord.Color.gold()
+        title="🎉 ¡𝑩𝒊𝒆𝒏𝒗𝒆𝒏𝒊𝒅𝒐 𝒂𝒍 𝑬𝒗𝒆𝒏𝒕𝒐 𝒅𝒆 𝑹𝒐𝒃𝒖𝒙 𝑷𝒓𝒐𝒑𝒐𝒓𝒄𝒊𝒐𝒏𝒂𝒅𝒐 𝒑𝒐𝒓 𝑳𝒆𝒈𝒆𝒏𝒅𝒔 𝑨𝒄𝒄𝒐𝒖𝒏𝒕! 🎉",
+        description="¡𝑷𝒂𝒓𝒕𝒊𝒄𝒊𝒑𝒂 𝒑𝒂𝒓𝒂 𝒈𝒂𝒏𝒂𝒓 𝑹𝒐𝒃𝒖𝒙 𝒈𝒓𝒂𝒕𝒊𝒔! 𝑼𝒔𝒂 𝒍𝒐𝒔 𝒃𝒐𝒕𝒐𝒏𝒆𝒔 𝒅𝒆 𝒂𝒃𝒂𝒋𝒐 𝒑𝒂𝒓𝒂 𝒊𝒏𝒕𝒆𝒓𝒂𝒄𝒕𝒖𝒂𝒓 𝒚 𝒄𝒐𝒎𝒆𝒏𝒛𝒂𝒓 𝒕𝒖 𝒂𝒗𝒆𝒏𝒕𝒖𝒓𝒂. ¡𝑴𝒖𝒄𝒉𝒂 𝒔𝒖𝒆𝒓𝒕𝒆!",
+        color=discord.Color.gold() # Puedes probar otros colores como discord.Color.orange()
     )
+    
+    # --- Cambio aquí: usar el icono del servidor ---
+    if ctx.guild.icon:
+        embed.set_thumbnail(url=ctx.guild.icon.url)
+    # ------------------------------------------------
+    
+    # Agregar campos para organizar la información
+    embed.add_field(
+        name="☀️ Login Diario",
+        value="Reclama 5 LBucks cada 24 horas. ¡Es la forma más fácil de ganar!",
+        inline=False
+    )
+    embed.add_field(
+        name="🏪 Centro de Canjeo",
+        value="Canjea tus LBucks por Robux y otros premios en la tienda.",
+        inline=False
+    )
+    embed.add_field(
+        name="💵 Ver saldo",
+        value="Consulta tu saldo de LBucks en cualquier momento para saber cuánto tienes.",
+        inline=False
+    )
+    embed.add_field(
+        name="🎁 Donar",
+        value="Comparte tu riqueza. Dona LBucks a otros usuarios del servidor.",
+        inline=False
+    )
+
+    embed.set_footer(text="¡Gracias por participar en nuestro evento!")
+    
     await ctx.followup.send(embed=embed, view=MainMenuView())
 
 
