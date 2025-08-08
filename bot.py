@@ -79,6 +79,33 @@ class MainMenuView(View):
         modal = DonateModal()
         await interaction.response.send_modal(modal)
 
+    @discord.ui.button(label="📝 Misiones", style=discord.ButtonStyle.secondary, custom_id="main:missions")
+    async def missions_button(self, button: Button, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        
+        missions = db.get_daily_missions(interaction.user.id)
+        if not missions:
+            await interaction.followup.send("No hay misiones disponibles en este momento. Inténtalo más tarde.")
+            return
+            
+            embed = discord.Embed(
+                title="📝 Tus Misiones Diarias",
+                description="Completa estas misiones para ganar LBucks.",
+                color=discord.Color.blue()
+    )
+    
+        for m in missions:
+            status_emoji = "✅" if m['is_completed'] else "⌛"
+            progress_text = f"({m['progress']}/{m['target_value']})" if not m['is_completed'] else ""
+            
+            embed.add_field(
+                name=f"{status_emoji} {m['description']}",
+                value=f"Recompensa: **{m['reward']} LBucks** {progress_text}",
+                inline=False
+        )
+            
+            await interaction.followup.send(embed=embed)
+
 # Fuera de las clases View, añade esta nueva clase
 class DonateModal(discord.ui.Modal):
     def __init__(self, *args, **kwargs):
@@ -300,6 +327,42 @@ async def on_interaction(interaction: discord.Interaction):
                 view=view,
                 ephemeral=True
             )
+            
+            # Después de tu manejador de on_interaction
+@bot.listen("on_message")
+async def mission_message_tracker(message):
+    if message.author.bot:
+        return
+    db.update_mission_progress(message.author.id, "message_count")
+
+@bot.listen("on_raw_reaction_add")
+async def mission_reaction_tracker(payload):
+    if payload.member.bot:
+        return
+    db.update_mission_progress(payload.member.id, "reaction_add")
+
+
+@bot.listen("on_application_command")
+async def mission_slash_command_tracker(ctx):
+    if ctx.author.bot:
+        return
+    db.update_mission_progress(ctx.author.id, "slash_command_use")
+
+# Después del nuevo listener de slash commands
+@bot.listen("on_voice_state_update")
+async def mission_voice_tracker(member, before, after):
+    if member.bot:
+        return
+    
+    # Si el usuario se une a un canal de voz
+    if before.channel is None and after.channel is not None:
+        db.update_mission_progress(member.id, "voice_minutes", progress_increase=0) # Para inicializar
+        
+    # Si el usuario se desconecta del canal de voz
+    if before.channel is not None and after.channel is None:
+        # Aquí iría una lógica más compleja para calcular el tiempo
+        # Pero para una misión simple, podemos asumir el progreso
+        db.update_mission_progress(member.id, "voice_minutes", progress_increase=1)
 
 @bot.slash_command(guild_ids=[GUILD_ID], name="evento", description="Muestra el menú principal del evento.")
 async def evento(ctx: discord.ApplicationContext):
