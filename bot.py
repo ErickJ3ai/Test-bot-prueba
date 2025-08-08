@@ -400,8 +400,9 @@ async def mission_voice_tracker(member, before, after):
 # Código corregido para la función evento
 @bot.slash_command(guild_ids=[GUILD_ID], name="evento", description="Muestra el menú principal del evento.")
 async def evento(ctx: discord.ApplicationContext):
-    await ctx.defer(ephemeral=True)  # Confirmamos recepción y damos más tiempo
-
+    # La respuesta se envía de forma única y segura con ctx.respond().
+    # Esto elimina el conflicto de doble respuesta.
+    
     embed = discord.Embed(
         title="🎉 ¡𝑩𝒊𝒆𝒏𝒗𝒆𝒏𝒊𝒅𝒐 𝒂𝒍 𝑬𝒗𝒆𝒏𝒕𝒐 𝒅𝒆 𝑹𝒐𝒃𝒖𝒙 𝑷𝒓𝒐𝒑𝒐𝒓𝒄𝒊𝒐𝒏𝒂𝒅𝒐 𝒑𝒐𝒓 𝑳𝒆𝒈𝒆𝒏𝒅𝒔 𝑨𝒄𝒄𝒐𝒖𝒏𝒕! 🎉",
         description="𝑷𝒂𝒓𝒕𝒊𝒄𝒊𝒑𝒂 𝒑𝒂𝒓𝒂 𝒈𝒂𝒏𝒂𝒓 𝑹𝒐𝒃𝒖𝒙 𝒈𝒓𝒂𝒕𝒊𝒔! 𝑼𝒔𝒂 𝒍𝒐𝒔 𝒃𝒐𝒕𝒐𝒏𝒆𝒔 𝒅𝒆 𝒂𝒃𝒂𝒋𝒐 𝒑𝒂𝒓𝒂 𝒊𝒏𝒕𝒆𝒓𝒂𝒄𝒕𝒖𝒂𝒓 𝒚 𝒄𝒐𝒎𝒆𝒏𝒛𝒂𝒓 𝒕𝒖 𝒂𝒗𝒆𝒏𝒕𝒖𝒓𝒂. ¡𝑴𝒖𝒄𝒉𝒂 𝒔𝒖𝒆𝒓𝒕𝒆!",
@@ -439,9 +440,7 @@ async def evento(ctx: discord.ApplicationContext):
 
     embed.set_footer(text="¡Gracias por participar en nuestro evento!")
     
-    # Ahora enviamos la respuesta final con followup (porque ya hicimos defer)
-    await ctx.followup.send(embed=embed, view=bot.main_menu_view, ephemeral=True)
-
+    await ctx.respond(embed=embed, view=bot.main_menu_view, ephemeral=True)
 
 # Nuevo comando para consultar saldo
 @bot.slash_command(guild_ids=[GUILD_ID], name="saldo", description="Consulta tu saldo actual de LBucks.")
