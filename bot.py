@@ -70,9 +70,9 @@ class MainMenuView(View):
 
     @discord.ui.button(label="💵 𝐕𝐞𝐫 𝐬𝐚𝐥𝐝𝐨", style=discord.ButtonStyle.secondary, custom_id="main:view_balance")
     async def view_balance_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        # Esta lógica se ejecuta sin un defer.
         balance = db.get_balance(interaction.user.id)
-        await interaction.followup.send(f"Tu saldo actual es: **{balance} LBucks** 🪙")
+        await interaction.response.send_message(f"Tu saldo actual es: **{balance} LBucks** 🪙", ephemeral=True)
     
     @discord.ui.button(label="🎁 𝐃𝐨𝐧𝐚𝐫", style=discord.ButtonStyle.secondary, custom_id="main:donate_lbucks")
     async def donate_button(self, button: Button, interaction: discord.Interaction):
