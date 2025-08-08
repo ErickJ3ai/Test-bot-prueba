@@ -27,11 +27,11 @@ class MainMenuView(View):
         super().__init__(timeout=None)
 
    # Código corregido para la función daily_button
-@discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
+@discord.ui.button(label="☀️ 𝐋𝐨𝐠𝐢𝐧 𝐃𝐢𝐚𝐫𝐢𝐨", style=discord.ButtonStyle.success, custom_id="main:daily_login")
 async def daily_button(self, button: Button, interaction: discord.Interaction):
-        # La respuesta inicial se envía aquí.
-        await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
 
+    try:
         user_id = interaction.user.id
         user_data = db.get_user(user_id)
         
@@ -41,14 +41,12 @@ async def daily_button(self, button: Button, interaction: discord.Interaction):
 
         last_claim_time = user_data[2]
         
-        # Lógica para manejar el formato de fecha
         if isinstance(last_claim_time, str):
             try:
                 last_claim_time = datetime.datetime.fromisoformat(last_claim_time)
             except ValueError:
                 last_claim_time = None
 
-        # Verificar si ya reclamó en las últimas 24h
         if isinstance(last_claim_time, datetime.datetime) and (datetime.datetime.utcnow() - last_claim_time < datetime.timedelta(hours=24)):
             time_left = datetime.timedelta(hours=24) - (datetime.datetime.utcnow() - last_claim_time)
             hours, rem = divmod(int(time_left.total_seconds()), 3600)
@@ -56,24 +54,21 @@ async def daily_button(self, button: Button, interaction: discord.Interaction):
             await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.")
             return
 
-        # Si todo es correcto, dar la recompensa
-        try:
-            db.claim_daily_reward(user_id, 5)
-            await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
-        except Exception as e:
-            print(f"Error en daily_button: {e}")
-            await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.")
-            await interaction.edit_original_response(view=bot.main_menu_view)
+        db.claim_daily_reward(user_id, 5)
+        await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
+
+    except Exception as e:
+        print(f"Error en daily_button: {e}")
+        await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.")
 
 
     # Código corregido para la función redeem_button
-@discord.ui.button(label="🏪 Centro de Canjeo", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
-async def redeem_button(self, button: Button, interaction: discord.Interaction):
-    await interaction.response.send_message("Abriendo el Centro de Canjeo...", view=RedeemMenuView(), ephemeral=True)
+@discord.ui.button(label="🏪 𝐂𝐞𝐧𝐭𝐫𝐨 𝐝𝐞 𝐂𝐚𝐧𝐣𝐞𝐨", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
+    async def redeem_button(self, button: Button, interaction: discord.Interaction):
+        await interaction.response.send_message("Abriendo el Centro de Canjeo...", view=RedeemMenuView(), ephemeral=True)
 
     @discord.ui.button(label="💵 𝐕𝐞𝐫 𝐬𝐚𝐥𝐝𝐨", style=discord.ButtonStyle.secondary, custom_id="main:view_balance")
     async def view_balance_button(self, button: Button, interaction: discord.Interaction):
-        # Esta lógica se ejecuta sin un defer.
         balance = db.get_balance(interaction.user.id)
         await interaction.response.send_message(f"Tu saldo actual es: **{balance} LBucks** 🪙", ephemeral=True)
     
@@ -82,7 +77,7 @@ async def redeem_button(self, button: Button, interaction: discord.Interaction):
         modal = DonateModal()
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="📝 Misiones", style=discord.ButtonStyle.secondary, custom_id="main:missions")
+   @discord.ui.button(label="📝 𝐌𝐢𝐬𝐢𝐨𝐧𝐞𝐬", style=discord.ButtonStyle.secondary, custom_id="main:missions")
     async def missions_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
@@ -91,12 +86,12 @@ async def redeem_button(self, button: Button, interaction: discord.Interaction):
             await interaction.followup.send("No hay misiones disponibles en este momento. Inténtalo más tarde.")
             return
             
-            embed = discord.Embed(
-                title="📝 Tus Misiones Diarias",
-                description="Completa estas misiones para ganar LBucks.",
-                color=discord.Color.blue()
-    )
-    
+        embed = discord.Embed(
+            title="📝 Tus Misiones Diarias",
+            description="Completa estas misiones para ganar LBucks.",
+            color=discord.Color.blue()
+        )
+        
         for m in missions:
             status_emoji = "✅" if m['is_completed'] else "⌛"
             progress_text = f"({m['progress']}/{m['target_value']})" if not m['is_completed'] else ""
@@ -105,9 +100,9 @@ async def redeem_button(self, button: Button, interaction: discord.Interaction):
                 name=f"{status_emoji} {m['description']}",
                 value=f"Recompensa: **{m['reward']} LBucks** {progress_text}",
                 inline=False
-        )
+            )
             
-            await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed)
 
 # Fuera de las clases View, añade esta nueva clase
 class DonateModal(discord.ui.Modal):
