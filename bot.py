@@ -81,32 +81,35 @@ class MainMenuView(View):
 
 # Fuera de las clases View, añade esta nueva clase
 class DonateModal(discord.ui.Modal):
-    def __init__(self):
-        super().__init__(title="Donar LBucks")
-
-    amount_input = discord.ui.InputText(
-        label="Cantidad de LBucks",
-        placeholder="Introduce la cantidad a donar",
-        min_length=1,
-        max_length=10,
-        style=discord.InputTextStyle.short
-    )
-    recipient_input = discord.ui.InputText(
-        label="Destinatario (ID o nombre de usuario)",
-        placeholder="Introduce el ID o nombre de usuario de la persona",
-        min_length=1,
-        max_length=32,
-        style=discord.InputTextStyle.short
-    )
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs, title="Donar LBucks")
+        
+        # Define los campos de texto dentro del constructor
+        self.amount_input = discord.ui.InputText(
+            label="Cantidad de LBucks",
+            placeholder="Introduce la cantidad a donar",
+            min_length=1,
+            max_length=10,
+            style=discord.InputTextStyle.short
+        )
+        self.recipient_input = discord.ui.InputText(
+            label="Destinatario (ID o nombre de usuario)",
+            placeholder="Introduce el ID o nombre de usuario de la persona",
+            min_length=1,
+            max_length=32,
+            style=discord.InputTextStyle.short
+        )
+        
+        # Agrega los campos al modal
+        self.add_item(self.amount_input)
+        self.add_item(self.recipient_input)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         try:
-            # Lógica de donación
             amount = int(self.amount_input.value)
             recipient_str = self.recipient_input.value
 
-            # Obtener el objeto del miembro (usuario)
             if recipient_str.isdigit():
                 recipient = await bot.fetch_user(int(recipient_str))
             else:
@@ -119,15 +122,17 @@ class DonateModal(discord.ui.Modal):
             if amount <= 0:
                 await interaction.followup.send("La cantidad a donar debe ser un número positivo.")
                 return
+            
+            if interaction.user.id == recipient.id:
+                await interaction.followup.send("No puedes donarte LBucks a ti mismo.")
+                return
 
             doner_balance = db.get_balance(interaction.user.id)
             if doner_balance < amount:
                 await interaction.followup.send("No tienes suficientes LBucks para donar.")
                 return
             
-            # Restar del donante
             db.update_lbucks(interaction.user.id, -amount)
-            # Sumar al destinatario
             db.update_lbucks(recipient.id, amount)
             
             await interaction.followup.send(f"Has donado **{amount} LBucks** a **{recipient.name}**. ¡Gracias por tu generosidad! 🎉")
