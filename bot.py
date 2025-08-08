@@ -290,6 +290,10 @@ async def on_ready():
         print(f"⚠️ Error al inicializar la base de datos: {e}")
 
     try:
+        # Creamos una única instancia de la vista
+        bot.main_menu_view = MainMenuView()
+        
+        # Registramos la vista para que el bot la reconozca después de reinicios
         if not hasattr(bot, "persistent_views_added"):
             bot.add_view(bot.main_menu_view)
             bot.add_view(AdminActionView())
