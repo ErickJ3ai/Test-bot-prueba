@@ -170,16 +170,37 @@ class DonateModal(discord.ui.Modal):
             
 # Código corregido para la clase RedeemMenuView
 class RedeemMenuView(View):
-    def __init__(self, items): # <- Ahora acepta 'items'
+    def __init__(self, items):
         super().__init__(timeout=300)
-        for item_id, price, stock in items: # <- Usa la variable que recibió
+        for item_id, price, stock in items:
             robux_amount = item_id.split('_')[0]
-            self.add_item(Button(
+            button = Button(
                 label=f"{robux_amount} Robux ({price} LBucks)",
                 custom_id=f"redeem_{item_id}",
                 style=discord.ButtonStyle.blurple,
                 disabled=(stock <= 0)
-            ))
+            )
+            # El botón ahora tiene una función de callback que maneja el clic
+            button.callback = self.handle_redeem_click
+            self.add_item(button)
+
+    async def handle_redeem_click(self, interaction: discord.Interaction):
+        custom_id = interaction.data['custom_id']
+        item_id = custom_id.replace("redeem_", "")
+        
+        # Llamada asíncrona a la base de datos
+        item = await asyncio.to_thread(db.get_item, item_id)
+        
+        if not item:
+            return await interaction.response.send_message("Este item ya no existe.", ephemeral=True)
+            
+        view = ConfirmCancelView(user_id=interaction.user.id, item_id=item_id, price=item[1])
+        await interaction.response.send_message(
+            f"¿Confirmas el canje de **{item[0].split('_')[0]} Robux** "
+            f"por **{item[1]} LBucks**?",
+            view=view,
+            ephemeral=True
+        )
 
 class ConfirmCancelView(View):
     def __init__(self, user_id, item_id, price):
@@ -191,8 +212,10 @@ class ConfirmCancelView(View):
     @discord.ui.button(label="Confirmar Canjeo", style=discord.ButtonStyle.success)
     async def confirm_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        balance = db.get_balance(self.user_id)
-        item_data = db.get_item(self.item_id)
+        # Llamadas asíncronas a la base de datos
+        balance = await asyncio.to_thread(db.get_balance, self.user_id)
+        item_data = await asyncio.to_thread(db.get_item, self.item_id)
+        
         if not item_data or item_data[2] <= 0:
             await interaction.followup.send("¡Justo se agotó! Alguien más fue más rápido.")
             return
@@ -200,8 +223,8 @@ class ConfirmCancelView(View):
             await interaction.followup.send("No tienes suficientes LBucks.")
             return
 
-        db.update_lbucks(self.user_id, -self.price)
-        db.update_stock(self.item_id, -1)
+        await asyncio.to_thread(db.update_lbucks, self.user_id, -self.price)
+        await asyncio.to_thread(db.update_stock, self.item_id, -1)
         log_channel = bot.get_channel(REDEMPTION_LOG_CHANNEL_ID)
         if log_channel:
             robux_amount = self.item_id.split('_')[0]
@@ -213,8 +236,8 @@ class ConfirmCancelView(View):
             )
             embed.set_thumbnail(url=interaction.user.display_avatar.url)
             log_message = await log_channel.send(embed=embed, view=AdminActionView())
-            db.create_redemption(self.user_id, self.item_id, log_message.id)
-        
+            await asyncio.to_thread(db.create_redemption, self.user_id, self.item_id, log_message.id)
+            
         await interaction.followup.send("¡Canjeo realizado! Un administrador revisará tu solicitud.")
         await interaction.edit_original_response(content="Procesando...", view=None)
 
