@@ -58,11 +58,12 @@ class MainMenuView(View):
             print(f"Error en daily_button: {e}")
             await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.", ephemeral=True)
 
-    @discord.ui.button(label="🏪 𝐂𝐞𝐧𝐭𝐫𝐨 𝐝𝐞 𝐂𝐚𝐧𝐣𝐞𝐨", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
-    async def redeem_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        items = await asyncio.to_thread(db.get_shop_items) or []
-        await interaction.followup.send("Abriendo el Centro de Canjeo...", view=RedeemMenuView(items), ephemeral=True)
+    # Código corregido para la función redeem_button
+@discord.ui.button(label="🏪 𝐂𝐞𝐧𝐭𝐫𝐨 𝐝𝐞 𝐂𝐚𝐧𝐣𝐞𝐨", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
+async def redeem_button(self, button: Button, interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True) # Se usa defer porque la llamada a la DB puede ser lenta
+    items = await asyncio.to_thread(db.get_shop_items) or []
+    await interaction.followup.send("Abriendo el Centro de Canjeo...", view=RedeemMenuView(items), ephemeral=True)
 
     @discord.ui.button(label="💵 𝐕𝐞𝐫 𝐬𝐚𝐥𝐝𝐨", style=discord.ButtonStyle.secondary, custom_id="main:view_balance")
     async def view_balance_button(self, button: Button, interaction: discord.Interaction):
@@ -164,11 +165,11 @@ class DonateModal(discord.ui.Modal):
             print(f"Error en el modal de donación: {e}")
             await interaction.followup.send("Ocurrió un error al procesar tu donación. Intenta de nuevo más tarde.", ephemeral=True)
             
+# Código corregido para la clase RedeemMenuView
 class RedeemMenuView(View):
-    def __init__(self):
+    def __init__(self, items): # <- Ahora acepta 'items'
         super().__init__(timeout=300)
-        items = db.get_shop_items() or []
-        for item_id, price, stock in items:
+        for item_id, price, stock in items: # <- Usa la variable que recibió
             robux_amount = item_id.split('_')[0]
             self.add_item(Button(
                 label=f"{robux_amount} Robux ({price} LBucks)",
