@@ -302,12 +302,6 @@ async def on_ready():
     except Exception as e:
         print(f"⚠️ Error al registrar vistas persistentes: {e}")
 
-    try:
-        synced = await bot.tree.sync(guild=Object(id=GUILD_ID))
-        print(f"🔄 {len(synced)} comandos sincronizados con el servidor.")
-    except Exception as e:
-        print(f"⚠️ Error al sincronizar comandos: {e}")
-
 # ... (el resto de tu código)
 # --- MANEJADOR DE COMPONENTES CON CUSTOM_ID ---
 @bot.listen()
