@@ -1,4 +1,5 @@
-py-cord==2.5.0
+discord.py
 python-dotenv
 Flask
 waitress
+supabase-py
