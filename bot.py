@@ -61,10 +61,10 @@ class MainMenuView(View):
 
     @discord.ui.button(label="🏪 𝐂𝐞𝐧𝐭𝐫𝐨 𝐝𝐞 𝐂𝐚𝐧𝐣𝐞𝐨", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
     async def redeem_button(self, button: Button, interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    # Llamada asíncrona a la base de datos
-    items = await asyncio.to_thread(db.get_shop_items) or []
-    await interaction.followup.send("Abriendo el Centro de Canjeo...", view=RedeemMenuView(items), ephemeral=True)
+        await interaction.response.defer(ephemeral=True)
+        # Llamada asíncrona a la base de datos
+        items = await asyncio.to_thread(db.get_shop_items) or []
+        await interaction.followup.send("Abriendo el Centro de Canjeo...", view=RedeemMenuView(items), ephemeral=True)
 
     @discord.ui.button(label="💵 𝐕𝐞𝐫 𝐬𝐚𝐥𝐝𝐨", style=discord.ButtonStyle.secondary, custom_id="main:view_balance")
     async def view_balance_button(self, button: Button, interaction: discord.Interaction):
@@ -466,10 +466,10 @@ def run_web_server():
     serve(app, host="0.0.0.0", port=8080)
 
 def run_bot():
-   # Registrar vistas persistentes justo antes de iniciar el bot
+    # Registrar vistas persistentes justo antes de iniciar el bot
     bot.run(TOKEN)
+
 if __name__ == "__main__":
     web_server_thread = Thread(target=run_web_server)
     web_server_thread.start()
     run_bot()
-
