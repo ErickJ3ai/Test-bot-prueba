@@ -28,16 +28,20 @@ class MainMenuView(View):
 
     @discord.ui.button(label="☀️ 𝐋𝐨𝐠𝐢𝐧 𝐃𝐢𝐚𝐫𝐢𝐨", style=discord.ButtonStyle.success, custom_id="main:daily_login")
     async def daily_button(self, button: Button, interaction: discord.Interaction):
+        print("Botón de Login Diario presionado.") # <-- Agrega esto
         await interaction.response.defer(ephemeral=True)
         try:
             user_id = interaction.user.id
+            print(f"Buscando datos de usuario para ID: {user_id}") # <-- Agrega esto
             user_data = await asyncio.to_thread(db.get_user, user_id)
             
             if user_data is None:
+                print("Error: user_data es None.") # <-- Agrega esto
                 await interaction.followup.send("Error al obtener tus datos. Intenta de nuevo.", ephemeral=True)
                 return
             
             last_claim_time = user_data[2]
+            print(f"Último reclamo: {last_claim_time}") # <-- Agrega esto
             
             if isinstance(last_claim_time, str):
                 try:
@@ -56,7 +60,7 @@ class MainMenuView(View):
             await interaction.followup.send("¡Has recibido 5 LBucks! 🪙", ephemeral=True)
 
         except Exception as e:
-            print(f"Error en daily_button: {e}")
+            print(f"🚨 Error inesperado en daily_button: {e}") # <-- Agrega esto
             await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.", ephemeral=True)
 
     @discord.ui.button(label="🏪 𝐂𝐞𝐧𝐭𝐫𝐨 𝐝𝐞 𝐂𝐚𝐧𝐣𝐞𝐨", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
