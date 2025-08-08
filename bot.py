@@ -63,7 +63,7 @@ async def daily_button(self, button: Button, interaction: discord.Interaction):
 
 
     # Código corregido para la función redeem_button
-@discord.ui.button(label="🏪 𝐂𝐞𝐧𝐭𝐫𝐨 𝐝𝐞 𝐂𝐚𝐧𝐣𝐞𝐨", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
+    @discord.ui.button(label="🏪 𝐂𝐞𝐧𝐭𝐫𝐨 𝐝𝐞 𝐂𝐚𝐧𝐣𝐞𝐨", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
     async def redeem_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.send_message("Abriendo el Centro de Canjeo...", view=RedeemMenuView(), ephemeral=True)
 
@@ -78,7 +78,7 @@ async def daily_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.send_modal(modal)
 
    @discord.ui.button(label="📝 𝐌𝐢𝐬𝐢𝐨𝐧𝐞𝐬", style=discord.ButtonStyle.secondary, custom_id="main:missions")
-    async def missions_button(self, button: Button, interaction: discord.Interaction):
+   async def missions_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
         missions = db.get_daily_missions(interaction.user.id)
