@@ -49,15 +49,15 @@ class MainMenuView(View):
                 time_left = datetime.timedelta(hours=24) - (datetime.datetime.utcnow() - last_claim_time)
                 hours, rem = divmod(int(time_left.total_seconds()), 3600)
                 minutes, _ = divmod(rem, 60)
-                await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.")
+                await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.", ephemeral=True)
                 return
 
             db.claim_daily_reward(user_id, 5)
-            await interaction.followup.send("¡Has recibido 5 LBucks! 🪙")
+            await interaction.followup.send("¡Has recibido 5 LBucks! 🪙", ephemeral=True)
 
         except Exception as e:
             print(f"Error en daily_button: {e}")
-            await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.")
+            await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.", ephemeral=True)
 
     @discord.ui.button(label="🏪 𝐂𝐞𝐧𝐭𝐫𝐨 𝐝𝐞 𝐂𝐚𝐧𝐣𝐞𝐨", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
     async def redeem_button(self, button: Button, interaction: discord.Interaction):
@@ -79,7 +79,7 @@ class MainMenuView(View):
         
         missions = db.get_daily_missions(interaction.user.id)
         if not missions:
-            await interaction.followup.send("No hay misiones disponibles en este momento. Inténtalo más tarde.")
+            await interaction.followup.send("No hay misiones disponibles en este momento. Inténtalo más tarde.", ephemeral=True)
             return
             
         embed = discord.Embed(
@@ -98,7 +98,7 @@ class MainMenuView(View):
                 inline=False
             )
             
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 # Fuera de las clases View, añade esta nueva clase
 class DonateModal(discord.ui.Modal):
@@ -137,32 +137,32 @@ class DonateModal(discord.ui.Modal):
                 recipient = discord.utils.get(interaction.guild.members, name=recipient_str)
 
             if recipient is None:
-                await interaction.followup.send("No se pudo encontrar al destinatario.")
+                await interaction.followup.send("No se pudo encontrar al destinatario.", ephemeral=True)
                 return
 
             if amount <= 0:
-                await interaction.followup.send("La cantidad a donar debe ser un número positivo.")
+                await interaction.followup.send("La cantidad a donar debe ser un número positivo.", ephemeral=True)
                 return
             
             if interaction.user.id == recipient.id:
-                await interaction.followup.send("No puedes donarte LBucks a ti mismo.")
+                await interaction.followup.send("No puedes donarte LBucks a ti mismo.", ephemeral=True)
                 return
 
             doner_balance = db.get_balance(interaction.user.id)
             if doner_balance < amount:
-                await interaction.followup.send("No tienes suficientes LBucks para donar.")
+                await interaction.followup.send("No tienes suficientes LBucks para donar.", ephemeral=True)
                 return
             
             db.update_lbucks(interaction.user.id, -amount)
             db.update_lbucks(recipient.id, amount)
             
-            await interaction.followup.send(f"Has donado **{amount} LBucks** a **{recipient.name}**. ¡Gracias por tu generosidad! 🎉")
+            await interaction.followup.send(f"Has donado **{amount} LBucks** a **{recipient.name}**. ¡Gracias por tu generosidad! 🎉", ephemeral=True)
 
         except ValueError:
-            await interaction.followup.send("La cantidad debe ser un número válido.")
+            await interaction.followup.send("La cantidad debe ser un número válido.", ephemeral=True)
         except Exception as e:
             print(f"Error en el modal de donación: {e}")
-            await interaction.followup.send("Ocurrió un error al procesar tu donación. Intenta de nuevo más tarde.")
+            await interaction.followup.send("Ocurrió un error al procesar tu donación. Intenta de nuevo más tarde.", ephemeral=True)
             
 class RedeemMenuView(View):
     def __init__(self):
