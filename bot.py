@@ -26,8 +26,9 @@ class MainMenuView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="☀️ 𝐋𝐨𝐠𝐢𝐧 𝐃𝐢𝐚𝐫𝐢𝐨", style=discord.ButtonStyle.success, custom_id="main:daily_login")
-    async def daily_button(self, button: Button, interaction: discord.Interaction):
+   # Código corregido para la función daily_button
+@discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
+async def daily_button(self, button: Button, interaction: discord.Interaction):
         # La respuesta inicial se envía aquí.
         await interaction.response.defer(ephemeral=True)
 
@@ -62,11 +63,13 @@ class MainMenuView(View):
         except Exception as e:
             print(f"Error en daily_button: {e}")
             await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.")
+            await interaction.edit_original_response(view=bot.main_menu_view)
 
 
-    @discord.ui.button(label="🏪 𝐂𝐞𝐧𝐭𝐫𝐨 𝐝𝐞 𝐂𝐚𝐧𝐣𝐞𝐨", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
-    async def redeem_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.send_message("Abriendo el Centro de Canjeo...", view=RedeemMenuView(), ephemeral=True)
+    # Código corregido para la función redeem_button
+@discord.ui.button(label="🏪 Centro de Canjeo", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
+async def redeem_button(self, button: Button, interaction: discord.Interaction):
+    await interaction.response.send_message("Abriendo el Centro de Canjeo...", view=RedeemMenuView(), ephemeral=True)
 
     @discord.ui.button(label="💵 𝐕𝐞𝐫 𝐬𝐚𝐥𝐝𝐨", style=discord.ButtonStyle.secondary, custom_id="main:view_balance")
     async def view_balance_button(self, button: Button, interaction: discord.Interaction):
@@ -289,18 +292,17 @@ class AdminActionView(View):
 async def on_ready():
     print(f"✅ BOT '{bot.user}' CONECTADO Y LISTO")
     
-    try:
-        db.init_db()
-        print("✔️ Base de datos inicializada.")
-    except Exception as e:
-        print(f"⚠️ Error al inicializar la base de datos: {e}")
-
-    try:
-        if not hasattr(bot, "persistent_views_added"):
-            bot.add_view(MainMenuView())
-            bot.add_view(AdminActionView())
-            bot.persistent_views_added = True
-            print("👁️ Vistas persistentes registradas.")
+    # ... (El resto del código de on_ready) ...
+    
+    # Creamos una única instancia de la vista
+    bot.main_menu_view = MainMenuView()
+    
+    # Registramos la vista para que el bot la reconozca después de reinicios
+    if not hasattr(bot, "persistent_views_added"):
+        bot.add_view(bot.main_menu_view)
+        bot.add_view(AdminActionView())
+        bot.persistent_views_added = True
+        print("👁️ Vistas persistentes registradas.")
     except Exception as e:
         print(f"⚠️ Error al registrar vistas persistentes: {e}")
 
@@ -407,8 +409,7 @@ async def evento(ctx: discord.ApplicationContext):
     embed.set_footer(text="¡Gracias por participar en nuestro evento!")
     
     # La respuesta se envía de forma única y segura con ctx.respond().
-    await ctx.respond(embed=embed, view=MainMenuView(), ephemeral=True)
-
+    await ctx.respond(embed=embed, view=bot.main_menu_view, ephemeral=True)
 
 # Nuevo comando para consultar saldo
 @bot.slash_command(guild_ids=[GUILD_ID], name="saldo", description="Consulta tu saldo actual de LBucks.")
