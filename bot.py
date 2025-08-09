@@ -49,14 +49,15 @@ class MainMenuView(View):
                 except ValueError:
                     last_claim_time = None
 
-            if isinstance(last_claim_time, datetime.datetime) and (datetime.datetime.utcnow() - last_claim_time < datetime.timedelta(hours=24)):
+            if isinstance(last_claim_time, datetime.datetime) and (datetime.datetime.now(datetime.UTC) - last_claim_time < datetime.timedelta(hours=24)):
                 time_left = datetime.timedelta(hours=24) - (datetime.datetime.utcnow() - last_claim_time)
                 hours, rem = divmod(int(time_left.total_seconds()), 3600)
                 minutes, _ = divmod(rem, 60)
                 await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.", ephemeral=True)
                 return
 
-            await asyncio.to_thread(db.claim_daily_reward, user_id, 5)
+            await asyncio.to_thread(db.update_lbucks, user_id, 5)
+            await asyncio.to_thread(db.update_daily_claim, user_id)
             await interaction.followup.send("¡Has recibido 5 LBucks! 🪙", ephemeral=True)
 
         except Exception as e:
