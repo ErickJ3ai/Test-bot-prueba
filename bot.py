@@ -50,7 +50,7 @@ class MainMenuView(View):
                     last_claim_time = None
 
             if isinstance(last_claim_time, datetime.datetime) and (datetime.datetime.now(datetime.UTC) - last_claim_time < datetime.timedelta(hours=24)):
-                time_left = datetime.timedelta(hours=24) - (datetime.datetime.utcnow() - last_claim_time)
+                time_left = datetime.timedelta(hours=24) - (datetime.datetime.now(datetime.UTC) - last_claim_time)
                 hours, rem = divmod(int(time_left.total_seconds()), 3600)
                 minutes, _ = divmod(rem, 60)
                 await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.", ephemeral=True)
