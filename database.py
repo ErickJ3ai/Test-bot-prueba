@@ -19,7 +19,7 @@ def get_user(user_id):
         response = supabase.from_('users').select('*').eq('user_id', str(user_id)).execute()
         if response.data:
             user_data = response.data[0]
-            last_daily_dt = datetime.datetime.fromisoformat(user_data['last_daily']) if user_data.get('last_daily') else None
+            last_daily_dt = datetime.datetime.fromisoformat(user_data['last_daily']).replace(tzinfo=datetime.timezone.utc) if user_data.get('last_daily') else None
             return (user_data['user_id'], user_data['lbucks'], last_daily_dt)
         else:
             supabase.from_('users').insert({'user_id': str(user_id)}).execute()
