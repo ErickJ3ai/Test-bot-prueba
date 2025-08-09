@@ -14,7 +14,7 @@ import asyncio
 
 # --- CONFIGURACIÓN E INICIALIZACIÓN ---
 load_dotenv()
-TOKEN = os.environ('DISCORD_TOKEN')
+TOKEN = os.environ['DISCORD_TOKEN']
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
