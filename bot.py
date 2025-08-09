@@ -45,7 +45,7 @@ class MainMenuView(View):
             
             if isinstance(last_claim_time, str):
                 try:
-                    last_claim_time = datetime.datetime.fromisoformat(last_claim_time)
+                    last_claim_time = datetime.datetime.fromisoformat(last_claim_time).replace(tzinfo=datetime.timezone.utc)
                 except ValueError:
                     last_claim_time = None
 
