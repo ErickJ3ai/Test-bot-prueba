@@ -288,7 +288,8 @@ class MainMenuView(View):
             embed.add_field(name=f"{status_emoji} {m['description']}", value=f"Recompensa: **{m['reward']} LBucks** {progress_text}", inline=False)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-
+# --- RECOMPENSAS POR INVITACIÓN ---
+invites_cache = {} # <--- Asegúrate de que esta línea esté aquí
 # --- EVENTOS ---
 @bot.event
 async def on_ready():
