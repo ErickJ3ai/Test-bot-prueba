@@ -443,4 +443,25 @@ async def add_lbucks(ctx: discord.ApplicationContext, usuario: discord.Member, c
     admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
 
     if admin_role is None or admin_role not in ctx.author.roles:
-        retu
+        return await ctx.respond("No tienes el rol de administrador para usar este comando.", ephemeral=True)
+
+    await ctx.defer(ephemeral=True)
+
+    await asyncio.to_thread(db.update_lbucks, usuario.id, cantidad)
+    await ctx.followup.send(f"Se han añadido {cantidad} LBucks a {usuario.mention}.", ephemeral=True)
+
+app = Flask('')
+@app.route('/')
+def home():
+    return "El bot está vivo."
+
+def run_web_server():
+    serve(app, host="0.0.0.0", port=8080)
+
+def run_bot():
+    bot.run(TOKEN)
+
+if __name__ == "__main__":
+    web_server_thread = Thread(target=run_web_server)
+    web_server_thread.start()
+    run_bot()
