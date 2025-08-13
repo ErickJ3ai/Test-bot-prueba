@@ -21,87 +21,66 @@ intents.message_content = True
 bot = discord.Bot(intents=intents)
 
 # --- VISTAS DE BOTONES (UI) ---
-class MainMenuView(View):
-    def __init__(self):
-        super().__init__(timeout=None)
+class DonateModal(discord.ui.Modal):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs, title="Donar LBucks")
+        
+        self.amount_input = discord.ui.InputText(
+            label="Cantidad de LBucks",
+            placeholder="Introduce la cantidad a donar",
+            min_length=1,
+            max_length=10,
+            style=discord.InputTextStyle.short
+        )
+        self.recipient_input = discord.ui.InputText(
+            label="Destinatario (ID o nombre de usuario)",
+            placeholder="Introduce el ID o nombre de usuario de la persona",
+            min_length=1,
+            max_length=32,
+            style=discord.InputTextStyle.short
+        )
+        
+        self.add_item(self.amount_input)
+        self.add_item(self.recipient_input)
 
-    @discord.ui.button(label="☀️ Login Diario", style=discord.ButtonStyle.success, custom_id="main:daily_login")
-    async def daily_button(self, button: Button, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         try:
-            user_id = interaction.user.id
-            user_data = await asyncio.to_thread(db.get_user, user_id)
+            amount = int(self.amount_input.value)
+            recipient_str = self.recipient_input.value
 
-            if user_data is None:
-                await interaction.followup.send("Error al obtener tus datos. Intenta de nuevo.", ephemeral=True)
+            if recipient_str.isdigit():
+                recipient = await bot.fetch_user(int(recipient_str))
+            else:
+                recipient = discord.utils.get(interaction.guild.members, name=recipient_str)
+
+            if recipient is None:
+                await interaction.followup.send("No se pudo encontrar al destinatario.", ephemeral=True)
                 return
 
-            last_claim_time = user_data[2]
-
-            if isinstance(last_claim_time, str):
-                try:
-                    last_claim_time = datetime.datetime.fromisoformat(last_claim_time).replace(tzinfo=datetime.timezone.utc)
-                except ValueError:
-                    last_claim_time = None
-
-            if isinstance(last_claim_time, datetime.datetime) and (datetime.datetime.now(datetime.UTC) - last_claim_time < datetime.timedelta(hours=24)):
-                time_left = datetime.timedelta(hours=24) - (datetime.datetime.now(datetime.UTC) - last_claim_time)
-                hours, rem = divmod(int(time_left.total_seconds()), 3600)
-                minutes, _ = divmod(rem, 60)
-                await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.", ephemeral=True)
+            if amount <= 0:
+                await interaction.followup.send("La cantidad a donar debe ser un número positivo.", ephemeral=True)
+                return
+            
+            if interaction.user.id == recipient.id:
+                await interaction.followup.send("No puedes donarte LBucks a ti mismo.", ephemeral=True)
                 return
 
-            await asyncio.to_thread(db.update_lbucks, user_id, 5)
-            await asyncio.to_thread(db.update_daily_claim, user_id)
-            await interaction.followup.send("¡Has recibido 5 LBucks! 🪙", ephemeral=True)
+            doner_balance = await asyncio.to_thread(db.get_balance, interaction.user.id)
+            if doner_balance < amount:
+                await interaction.followup.send("No tienes suficientes LBucks para donar.", ephemeral=True)
+                return
+            
+            await asyncio.to_thread(db.update_lbucks, interaction.user.id, -amount)
+            await asyncio.to_thread(db.update_lbucks, recipient.id, amount)
+            
+            await interaction.followup.send(f"Has donado **{amount} LBucks** a **{recipient.name}**. ¡Gracias por tu generosidad! 🎉", ephemeral=True)
 
+        except ValueError:
+            await interaction.followup.send("La cantidad debe ser un número válido.", ephemeral=True)
         except Exception as e:
-            print(f"🚨 Error inesperado en daily_button: {e}")
-            await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.", ephemeral=True)
-
-    @discord.ui.button(label="🏪 Centro de Canjeo", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
-    async def redeem_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        items = await asyncio.to_thread(db.get_shop_items) or []
-        await interaction.followup.send("Abriendo el Centro de Canjeo...", view=RedeemMenuView(items), ephemeral=True)
-
-    @discord.ui.button(label="💵 Ver saldo", style=discord.ButtonStyle.secondary, custom_id="main:view_balance")
-    async def view_balance_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        balance = await asyncio.to_thread(db.get_balance, interaction.user.id)
-        await interaction.followup.send(f"Tu saldo actual es: **{balance} LBucks** 🪙", ephemeral=True)
-
-    @discord.ui.button(label="🎁 Donar", style=discord.ButtonStyle.secondary, custom_id="main:donate_lbucks")
-    async def donate_button(self, button: Button, interaction: discord.Interaction):
-        modal = DonateModal()
-        await interaction.response.send_modal(modal)
-
-    @discord.ui.button(label="📝 Misiones", style=discord.ButtonStyle.secondary, custom_id="main:missions")
-    async def missions_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-
-        missions = await asyncio.to_thread(db.get_daily_missions, interaction.user.id)
-        if not missions:
-            await interaction.followup.send("No hay misiones disponibles en este momento. Inténtalo más tarde.", ephemeral=True)
-            return
-
-        embed = discord.Embed(
-            title="📝 Tus Misiones Diarias",
-            description="Completa estas misiones para ganar LBucks.",
-            color=discord.Color.blue()
-        )
-
-        for m in missions:
-            status_emoji = "✅" if m['is_completed'] else "⌛"
-            progress_text = f"({m['progress']}/{m['target_value']})" if not m['is_completed'] else ""
-
-            embed.add_field(
-                name=f"{status_emoji} {m['description']}",
-                value=f"Recompensa: **{m['reward']} LBucks** {progress_text}",
-                inline=False
-            )
-
-        await interaction.followup.send(embed=embed, ephemeral=True)
+            print(f"Error en el modal de donación: {e}")
+            await interaction.followup.send("Ocurrió un error al procesar tu donación. Intenta de nuevo más tarde.", ephemeral=True)
 
 class RedeemMenuView(View):
     def __init__(self, items):
@@ -191,7 +170,7 @@ class AdminActionView(View):
         if not admin_role or admin_role not in interaction.user.roles:
             return await interaction.followup.send("No tienes permiso.", ephemeral=True)
 
-        redemption = db.get_redemption_by_message(interaction.message.id)
+        redemption = await asyncio.to_thread(db.get_redemption_by_message, interaction.message.id)
         if not redemption or redemption[4] != 'pending':
             return await interaction.edit_original_response(content="Este canjeo ya fue procesado.", view=None, embed=None)
 
@@ -216,7 +195,7 @@ class AdminActionView(View):
         if not admin_role or admin_role not in interaction.user.roles:
             return await interaction.followup.send("No tienes permiso.", ephemeral=True)
 
-        redemption = db.get_redemption_by_message(interaction.message.id)
+        redemption = await asyncio.to_thread(db.get_redemption_by_message, interaction.message.id)
         if not redemption or redemption[4] != 'pending':
             return await interaction.edit_original_response(content="Este canjeo ya fue procesado.", view=None, embed=None)
 
@@ -280,6 +259,11 @@ class UpdateMissionsView(View):
             
         await interaction.edit_original_response(embed=embed, view=self)
 
+class MainMenuView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+    
+    # ... (los botones del menú principal pueden ser convertidos a comandos de barra)
 
 # --- EVENTOS ---
 @bot.event
@@ -297,6 +281,7 @@ async def on_ready():
             bot.add_view(AdminActionView())
             bot.add_view(UpdateBalanceView())
             bot.add_view(UpdateMissionsView())
+            # bot.add_view(MainMenuView()) # No es necesario si se usan comandos de barra
             bot.persistent_views_added = True
             print("👁️ Vistas persistentes registradas.")
     except Exception as e:
@@ -371,7 +356,7 @@ async def ayuda(ctx: discord.ApplicationContext):
     )
     embed.add_field(
         name="➕ Robux Pendientes",
-        value="""Para ver tus Robux pendientes de canje, ve a la página web de Roblox, haz clic en el ícono de Robux  y luego en **"Mis transacciones"** . Los Robux pendientes estarán visibles en el apartado de **"Robux pendientes"** .""",
+        value="""Para ver tus Robux pendientes de canje, ve a la página web de Roblox, haz clic en el ícono de Robux y luego en **"Mis transacciones"**. Los Robux pendientes estarán visibles en el apartado de **"Robux pendientes"** .""",
         inline=False
     )
     embed.set_footer(text="¡Gracias por participar en nuestro evento! 🎉")
