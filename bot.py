@@ -235,10 +235,10 @@ class UpdateMissionsView(View):
     async def update_missions_button(self, button: Button, interaction: discord.Interaction):
         
         missions = await asyncio.to_thread(db.get_daily_missions, interaction.user.id)
+        
+        # Si no hay misiones, se envía un mensaje de respuesta directa en lugar de editar.
         if not missions:
-            # Aquí usamos el método de respuesta diferida para mensajes que no existen
-            await interaction.response.defer(ephemeral=True)
-            await interaction.followup.send("No hay misiones disponibles en este momento. Inténtalo más tarde.", ephemeral=True)
+            await interaction.response.send_message("No hay misiones disponibles en este momento. Inténtalo más tarde.", ephemeral=True)
             return
 
         embed = discord.Embed(
@@ -257,7 +257,7 @@ class UpdateMissionsView(View):
                 inline=False
             )
             
-        # Usar edit_original_response para actualizar el mensaje
+        # Usa edit_message para actualizar el mensaje de forma instantánea.
         await interaction.response.edit_message(embed=embed, view=self)
 
 
@@ -319,7 +319,7 @@ async def mission_voice_tracker(member, before, after):
 async def ayuda(ctx: discord.ApplicationContext):
     await ctx.defer(ephemeral=True)
     embed = discord.Embed(
-        title="📚 𝑮𝒖𝒊́𝒂 𝒅𝒆 𝒄𝒐𝒎𝒂𝒏𝒅𝒐𝒔",
+        title="📚 𝑮𝒖𝒊́𝒂 𝒅𝒆 𝒄𝒐𝒎𝒂𝒏𝒅𝒐𝐬",
         description="Aquí tienes todos los comandos disponibles para participar en el evento.",
         color=discord.Color.blue()
     )
