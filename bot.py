@@ -224,9 +224,8 @@ class UpdateBalanceView(View):
     
     @discord.ui.button(label="🔄 Actualizar Saldo", style=discord.ButtonStyle.blurple, custom_id="update:balance")
     async def update_balance_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer()
         balance = await asyncio.to_thread(db.get_balance, interaction.user.id)
-        await interaction.edit_original_response(content=f"Tu saldo actual es: **{balance} LBucks** 🪙", view=self)
+        await interaction.response.edit_message(content=f"Tu saldo actual es: **{balance} LBucks** 🪙", view=self)
 
 class UpdateMissionsView(View):
     def __init__(self):
@@ -234,13 +233,14 @@ class UpdateMissionsView(View):
 
     @discord.ui.button(label="🔄 Actualizar Misiones", style=discord.ButtonStyle.blurple, custom_id="update:missions")
     async def update_missions_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer()
         
         missions = await asyncio.to_thread(db.get_daily_missions, interaction.user.id)
         if not missions:
+            # Aquí usamos el método de respuesta diferida para mensajes que no existen
+            await interaction.response.defer(ephemeral=True)
             await interaction.followup.send("No hay misiones disponibles en este momento. Inténtalo más tarde.", ephemeral=True)
             return
-            
+
         embed = discord.Embed(
             title="📝 Tus Misiones Diarias",
             description="Completa estas misiones para ganar LBucks.",
@@ -257,13 +257,9 @@ class UpdateMissionsView(View):
                 inline=False
             )
             
-        await interaction.edit_original_response(embed=embed, view=self)
+        # Usar edit_original_response para actualizar el mensaje
+        await interaction.response.edit_message(embed=embed, view=self)
 
-class MainMenuView(View):
-    def __init__(self):
-        super().__init__(timeout=None)
-    
-    # ... (los botones del menú principal pueden ser convertidos a comandos de barra)
 
 # --- EVENTOS ---
 @bot.event
@@ -281,7 +277,6 @@ async def on_ready():
             bot.add_view(AdminActionView())
             bot.add_view(UpdateBalanceView())
             bot.add_view(UpdateMissionsView())
-            # bot.add_view(MainMenuView()) # No es necesario si se usan comandos de barra
             bot.persistent_views_added = True
             print("👁️ Vistas persistentes registradas.")
     except Exception as e:
@@ -448,25 +443,4 @@ async def add_lbucks(ctx: discord.ApplicationContext, usuario: discord.Member, c
     admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
 
     if admin_role is None or admin_role not in ctx.author.roles:
-        return await ctx.respond("No tienes el rol de administrador para usar este comando.", ephemeral=True)
-
-    await ctx.defer(ephemeral=True)
-
-    await asyncio.to_thread(db.update_lbucks, usuario.id, cantidad)
-    await ctx.followup.send(f"Se han añadido {cantidad} LBucks a {usuario.mention}.", ephemeral=True)
-
-app = Flask('')
-@app.route('/')
-def home():
-    return "El bot está vivo."
-
-def run_web_server():
-    serve(app, host="0.0.0.0", port=8080)
-
-def run_bot():
-    bot.run(TOKEN)
-
-if __name__ == "__main__":
-    web_server_thread = Thread(target=run_web_server)
-    web_server_thread.start()
-    run_bot()
+        retu
