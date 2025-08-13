@@ -9,7 +9,7 @@ url: str = os.environ.get("SUPABASE_URL")
 key: str = os.environ.get("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
-# --- REEMPLAZO DE CONEXIÓN CONTEXTUAL ---
+# --- CONEXIÓN A LA BASE DE DATOS ---
 def init_db():
     print("La base de datos de Supabase está lista. Las tablas deben crearse en el panel de control.")
 
@@ -22,7 +22,7 @@ def get_user(user_id):
             last_daily_dt = datetime.datetime.fromisoformat(user_data['last_daily']).replace(tzinfo=datetime.timezone.utc) if user_data.get('last_daily') else None
             return (user_data['user_id'], user_data['lbucks'], last_daily_dt)
         else:
-            supabase.from_('users').insert({'user_id': str(user_id)}).execute()
+            supabase.from_('users').insert({'user_id': str(user_id), 'lbucks': 0}).execute()
             return (str(user_id), 0, None)
     except Exception as e:
         print(f"[DB ERROR] Error en get_user: {e}")
@@ -48,22 +48,44 @@ def update_daily_claim(user_id):
     except Exception as e:
         print(f"[DB ERROR] Error en update_daily_claim: {e}")
 
+# --- FUNCIONES PARA LA TABLA 'invites' ---
+def check_and_update_invite_reward(invite_code, inviter_id):
+    try:
+        response = supabase.from_('invites').select('*').eq('invite_code', invite_code).execute()
+        if not response.data:
+            supabase.from_('invites').insert({'invite_code': invite_code, 'inviter_id': str(inviter_id)}).execute()
+            return
+
+        invite_data = response.data[0]
+        if not invite_data['reward_given']:
+            update_lbucks(inviter_id, 10) # Recompensa por invitación
+            supabase.from_('invites').update({'reward_given': True}).eq('invite_code', invite_code).execute()
+            print(f"Recompensa de invitación dada a {inviter_id}")
+
+    except Exception as e:
+        print(f"[DB ERROR] Error en check_and_update_invite_reward: {e}")
+        
+def get_invite_count(inviter_id):
+    try:
+        response = supabase.from_('invites').select('inviter_id').eq('inviter_id', str(inviter_id)).execute()
+        return len(response.data)
+    except Exception as e:
+        print(f"[DB ERROR] Error en get_invite_count: {e}")
+        return 0
+
 # --- FUNCIONES PARA LA TABLA 'missions' ---
 def get_daily_missions(user_id):
     try:
-        # 1. Verificar si ya tiene misiones asignadas para hoy
         today = datetime.date.today().isoformat()
         response = supabase.from_('user_missions').select('id, progress, is_completed, mission_id').eq('user_id', str(user_id)).eq('assigned_date', today).execute()
         
         if response.data:
-            # 2. Si ya tiene misiones, devolverlas
             user_missions_data = []
             for m in response.data:
                 mission_details = supabase.from_('missions').select('*').eq('mission_id', m['mission_id']).execute().data[0]
                 user_missions_data.append({**m, **mission_details})
             return user_missions_data
         else:
-            # 3. Si no, asignar 4 misiones aleatorias
             supabase.from_('user_missions').delete().eq('user_id', str(user_id)).execute()
             all_missions = supabase.from_('missions').select('*').execute().data
             if not all_missions:
@@ -83,7 +105,6 @@ def get_daily_missions(user_id):
             
             supabase.from_('user_missions').insert(missions_to_insert).execute()
             
-            # Devolver las misiones recién asignadas
             return get_daily_missions(user_id)
             
     except Exception as e:
@@ -101,7 +122,6 @@ def update_mission_progress(user_id, mission_type, progress_increase=1):
             if mission_details['mission_type'] == mission_type:
                 new_progress = user_mission['progress'] + progress_increase
                 
-                # Marcar como completada si el progreso alcanza el objetivo
                 is_completed = new_progress >= mission_details['target_value']
                 
                 supabase.from_('user_missions').upsert({
@@ -110,14 +130,12 @@ def update_mission_progress(user_id, mission_type, progress_increase=1):
                     'is_completed': is_completed
                 }).execute()
                 
-                # Si se completó, dar la recompensa
                 if is_completed:
                     update_lbucks(user_id, mission_details['reward'])
                     print(f"Misión completada por {user_id}. Recompensa: {mission_details['reward']} LBucks.")
                 
     except Exception as e:
         print(f"[DB ERROR] Error en update_mission_progress: {e}")
-
 
 # --- FUNCIONES PARA LA TABLA 'shop' ---
 def get_shop_items():
