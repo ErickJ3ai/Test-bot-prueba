@@ -337,7 +337,7 @@ async def mission_message_tracker(message):
         elif guess == game['word']: # El usuario adivinó la palabra completa
             reward = 20
             await asyncio.to_thread(db.update_lbucks, user_id, reward)
-            await message.channel.send(f"¡{message.author.mention} ha adivinado la palabra '{game['word']}'! Has ganado **{reward} LBucks**. 🥳")
+            await message.channel.send(f"¡{message.author.mention} ha adivinado la palabra '{game['word']}'! Has ganado **{reward} LBucks**. �")
             del word_games[user_id]
         else: # El usuario se equivocó
             await message.channel.send("¡Incorrecto! Intenta adivinar una letra o la palabra completa.")
