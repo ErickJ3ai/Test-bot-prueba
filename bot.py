@@ -23,6 +23,7 @@ intents.message_content = True
 bot = discord.Bot(intents=intents)
 
 # --- JUEGOS Y GESTIÓN DE ESTADO ---
+# El estado de los juegos ahora se guarda por el ID del canal, no del usuario.
 number_games = {}
 word_games = {}
 
@@ -43,14 +44,14 @@ async def check_word_game_timeout():
     while True:
         await asyncio.sleep(60)
         to_delete = []
-        for user_id, game in word_games.items():
+        for channel_id, game in word_games.items():
             if datetime.datetime.now() - game['start_time'] > datetime.timedelta(minutes=7):
-                channel = bot.get_channel(game['channel_id'])
+                channel = bot.get_channel(channel_id)
                 if channel:
                     await channel.send(f"¡Se acabó el tiempo para el juego de adivinar palabras! La palabra era '{game['word']}'.")
-                to_delete.append(user_id)
-        for user_id in to_delete:
-            del word_games[user_id]
+                to_delete.append(channel_id)
+        for channel_id in to_delete:
+            del word_games[channel_id]
             
 # --- VISTAS DE BOTONES (UI) ---
 class DonateModal(discord.ui.Modal):
@@ -337,7 +338,7 @@ async def mission_message_tracker(message):
         elif guess == game['word']: # El usuario adivinó la palabra completa
             reward = 20
             await asyncio.to_thread(db.update_lbucks, user_id, reward)
-            await message.channel.send(f"¡{message.author.mention} ha adivinado la palabra '{game['word']}'! Has ganado **{reward} LBucks**. �")
+            await message.channel.send(f"¡{message.author.mention} ha adivinado la palabra '{game['word']}'! Has ganado **{reward} LBucks**. 🥳")
             del word_games[user_id]
         else: # El usuario se equivocó
             await message.channel.send("¡Incorrecto! Intenta adivinar una letra o la palabra completa.")
@@ -465,34 +466,34 @@ async def misiones(ctx: discord.ApplicationContext):
 async def guess_number_game(ctx: discord.ApplicationContext, guess: int=None):
     await ctx.defer(ephemeral=False)
     user_id = ctx.user.id
+    channel_id = ctx.channel.id
     
     if guess is None:
-        if user_id in number_games:
-            await ctx.followup.send("¡Ya tienes un juego en curso! Adivina con el mismo comando.", ephemeral=False)
+        if channel_id in number_games:
+            await ctx.followup.send(f"¡Ya hay un juego en curso en este canal! Adivina un número con el mismo comando.", ephemeral=False)
             return
         
-        number_games[user_id] = {
+        number_games[channel_id] = {
             'number': random.randint(1, 100), 
-            'guesses': 0, 
-            'start_time': datetime.datetime.now(),
-            'channel_id': ctx.channel.id
+            'guesses': {}, # Guardamos los intentos por usuario
+            'start_time': datetime.datetime.now()
         }
         
         admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
         if admin_role and admin_role in ctx.user.roles:
-            pista = f"He pensado en un número entre 1 y 100. El número es **{number_games[user_id]['number']}**. Tienes 1 minuto para adivinarlo."
+            pista = f"He pensado en un número entre 1 y 100. El número es **{number_games[channel_id]['number']}**. Tienes 1 minuto para adivinarlo."
         else:
-            pista_par_impar = "par" if number_games[user_id]['number'] % 2 == 0 else "impar"
+            pista_par_impar = "par" if number_games[channel_id]['number'] % 2 == 0 else "impar"
             pista = f"¡He pensado en un número entre 1 y 100! Tienes 1 minuto para adivinarlo. La pista: Es un número **{pista_par_impar}**. 😉"
         await ctx.followup.send(pista, ephemeral=False)
         return
 
     # Lógica de adivinanza
-    if user_id not in number_games or ctx.channel.id != number_games[user_id]['channel_id']:
+    if channel_id not in number_games or ctx.channel.id != number_games[channel_id]['channel_id']:
         await ctx.followup.send("No tienes un juego en curso en este canal. Usa `/adivinar_numero` para empezar uno.", ephemeral=True)
         return
         
-    game = number_games[user_id]
+    game = number_games[channel_id]
     
     if datetime.datetime.now() - game['start_time'] > datetime.timedelta(minutes=1):
         admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
@@ -501,16 +502,17 @@ async def guess_number_game(ctx: discord.ApplicationContext, guess: int=None):
             final_message += f"El número era {game['number']}."
         final_message += f" Intenta de nuevo con `/adivinar_numero`."
         await ctx.followup.send(final_message, ephemeral=False)
-        del number_games[user_id]
+        del number_games[channel_id]
         return
     
-    game['guesses'] += 1
+    # Manejar los intentos de cada usuario
+    game['guesses'][user_id] = game['guesses'].get(user_id, 0) + 1
     
     if guess == game['number']:
         reward = 8
         await asyncio.to_thread(db.update_lbucks, user_id, reward)
-        await ctx.followup.send(f"¡Felicidades! Adivinaste el número {game['number']} en {game['guesses']} intentos. Has ganado **{reward} LBucks**. 🥳", ephemeral=False)
-        del number_games[user_id]
+        await ctx.followup.send(f"¡Felicidades, {ctx.user.mention}! Adivinaste el número {game['number']} en {game['guesses'][user_id]} intentos. Has ganado **{reward} LBucks**. 🥳", ephemeral=False)
+        del number_games[channel_id]
     elif guess < game['number']:
         await ctx.followup.send(f"Mi número es mayor. Inténtalo de nuevo.", ephemeral=False)
     else:
@@ -520,8 +522,8 @@ async def guess_number_game(ctx: discord.ApplicationContext, guess: int=None):
 @bot.slash_command(guild_ids=[GUILD_ID], name="adivinar_palabra", description="Inicia una partida para adivinar una palabra oculta.")
 async def guess_word_game(ctx: discord.ApplicationContext):
     await ctx.defer(ephemeral=False)
-    user_id = ctx.user.id
-    if user_id in word_games:
+    channel_id = ctx.channel.id
+    if channel_id in word_games:
         await ctx.followup.send("¡Ya tienes una partida en curso! Intenta adivinar la palabra.", ephemeral=False)
         return
     word_to_guess = await get_random_word_from_api()
@@ -529,19 +531,29 @@ async def guess_word_game(ctx: discord.ApplicationContext):
         await ctx.followup.send("No se pudo obtener una palabra. Inténtalo de nuevo más tarde.", ephemeral=False)
         return
 
-    word_games[user_id] = {'word': word_to_guess, 'guessed_letters': set(), 'start_time': datetime.datetime.now(), 'rounds': 10, 'channel_id': ctx.channel.id}
-    hint = "".join([c if c in word_games[user_id]['guessed_letters'] else "_" for c in word_to_guess])
-    await ctx.followup.send(f"¡Partida iniciada! Tienes 7 minutos y 10 rondas para adivinar la palabra. Pista: `{hint}`", ephemeral=False)
+    word_games[channel_id] = {
+        'word': word_to_guess,
+        'guessed_letters': set(),
+        'start_time': datetime.datetime.now(),
+        'rounds': 10,
+        'started_by': ctx.user.id
+    }
+    hint = "".join(["_" if c in word_games[channel_id]['guessed_letters'] else "_" for c in word_to_guess])
+    await ctx.followup.send(f"¡Partida iniciada por {ctx.user.mention}! Tienen 7 minutos y 10 rondas para adivinar la palabra. Pista: `{hint}`", ephemeral=False)
 
 
 @bot.listen("on_message")
 async def guess_word_listener(message):
-    user_id = message.author.id
-    if user_id in word_games and not message.author.bot and message.channel.id == word_games[user_id]['channel_id']:
-        game = word_games[user_id]
-        if datetime.datetime.now() - game['start_time'] > datetime.timedelta(minutes=7) or game['rounds'] <= 0:
-            await message.channel.send(f"¡Se acabó el tiempo o las rondas para el juego de adivinar palabras de {message.author.mention}! La palabra era '{game['word']}'.")
-            del word_games[user_id]
+    if message.author.bot:
+        return
+    channel_id = message.channel.id
+    if channel_id in word_games:
+        game = word_games[channel_id]
+        user_id = message.author.id
+
+        if datetime.datetime.now() - game['start_time'] > datetime.timedelta(minutes=7):
+            await message.channel.send(f"¡Se acabó el tiempo o las rondas para el juego de adivinar palabras! La palabra era '{game['word']}'.")
+            del word_games[channel_id]
             return
         
         guess = message.content.lower()
@@ -559,7 +571,7 @@ async def guess_word_listener(message):
                     reward = 20
                     await asyncio.to_thread(db.update_lbucks, user_id, reward)
                     await message.channel.send(f"¡Felicidades, {message.author.mention}! Adivinaste la palabra '{game['word']}' y has ganado **{reward} LBucks**. 🥳")
-                    del word_games[user_id]
+                    del word_games[channel_id]
                 else:
                     await message.channel.send(f"¡Bien hecho, {message.author.mention}! La palabra es: `{new_hint}`")
             else:
@@ -569,13 +581,13 @@ async def guess_word_listener(message):
                     await message.channel.send(f"Te quedan {game['rounds']} rondas.")
                 else:
                     await message.channel.send(f"¡Se acabaron las rondas! La palabra era '{game['word']}'.")
-                    del word_games[user_id]
+                    del word_games[channel_id]
 
         elif guess == game['word']: # El usuario adivinó la palabra completa
             reward = 20
             await asyncio.to_thread(db.update_lbucks, user_id, reward)
             await message.channel.send(f"¡{message.author.mention} ha adivinado la palabra '{game['word']}'! Has ganado **{reward} LBucks**. 🥳")
-            del word_games[user_id]
+            del word_games[channel_id]
         else: # El usuario se equivocó
             await message.channel.send("¡Incorrecto! Intenta adivinar una letra o la palabra completa.")
             game['rounds'] -= 1
@@ -583,7 +595,7 @@ async def guess_word_listener(message):
                 await message.channel.send(f"Te quedan {game['rounds']} rondas.")
             else:
                 await message.channel.send(f"¡Se acabaron las rondas! La palabra era '{game['word']}'.")
-                del word_games[user_id]
+                del word_games[channel_id]
 
 
 # --- SISTEMA DE INVITACIONES ---
