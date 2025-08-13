@@ -21,101 +21,13 @@ intents.message_content = True
 bot = discord.Bot(intents=intents)
 
 # --- VISTAS DE BOTONES (UI) ---
+# Se mantiene esta vista si es que se usa en otra parte del codigo
+# pero los comandos /evento ya no la usarian
 
-class MainMenuView(View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="☀️ 𝐋𝐨𝐠𝐢𝐧 𝐃𝐢𝐚𝐫𝐢𝐨", style=discord.ButtonStyle.success, custom_id="main:daily_login")
-    async def daily_button(self, button: Button, interaction: discord.Interaction):
-        print("Botón de Login Diario presionado.") # <-- Agrega esto
-        await interaction.response.defer(ephemeral=True)
-        try:
-            user_id = interaction.user.id
-            print(f"Buscando datos de usuario para ID: {user_id}") # <-- Agrega esto
-            user_data = await asyncio.to_thread(db.get_user, user_id)
-            
-            if user_data is None:
-                print("Error: user_data es None.") # <-- Agrega esto
-                await interaction.followup.send("Error al obtener tus datos. Intenta de nuevo.", ephemeral=True)
-                return
-            
-            last_claim_time = user_data[2]
-            print(f"Último reclamo: {last_claim_time}") # <-- Agrega esto
-            
-            if isinstance(last_claim_time, str):
-                try:
-                    last_claim_time = datetime.datetime.fromisoformat(last_claim_time).replace(tzinfo=datetime.timezone.utc)
-                except ValueError:
-                    last_claim_time = None
-
-            if isinstance(last_claim_time, datetime.datetime) and (datetime.datetime.now(datetime.UTC) - last_claim_time < datetime.timedelta(hours=24)):
-                time_left = datetime.timedelta(hours=24) - (datetime.datetime.now(datetime.UTC) - last_claim_time)
-                hours, rem = divmod(int(time_left.total_seconds()), 3600)
-                minutes, _ = divmod(rem, 60)
-                await interaction.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.", ephemeral=True)
-                return
-
-            await asyncio.to_thread(db.update_lbucks, user_id, 5)
-            await asyncio.to_thread(db.update_daily_claim, user_id)
-            await interaction.followup.send("¡Has recibido 5 LBucks! 🪙", ephemeral=True)
-
-        except Exception as e:
-            print(f"🚨 Error inesperado en daily_button: {e}") # <-- Agrega esto
-            await interaction.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.", ephemeral=True)
-
-    @discord.ui.button(label="🏪 𝐂𝐞𝐧𝐭𝐫𝐨 𝐝𝐞 𝐂𝐚𝐧𝐣𝐞𝐨", style=discord.ButtonStyle.primary, custom_id="main:redeem_center")
-    async def redeem_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        # Llamada asíncrona a la base de datos
-        items = await asyncio.to_thread(db.get_shop_items) or []
-        await interaction.followup.send("Abriendo el Centro de Canjeo...", view=RedeemMenuView(items), ephemeral=True)
-
-    @discord.ui.button(label="💵 𝐕𝐞𝐫 𝐬𝐚𝐥𝐝𝐨", style=discord.ButtonStyle.secondary, custom_id="main:view_balance")
-    async def view_balance_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        balance = await asyncio.to_thread(db.get_balance, interaction.user.id)
-        await interaction.followup.send(f"Tu saldo actual es: **{balance} LBucks** 🪙", ephemeral=True)
-    
-    @discord.ui.button(label="🎁 𝐃𝐨𝐧𝐚𝐫", style=discord.ButtonStyle.secondary, custom_id="main:donate_lbucks")
-    async def donate_button(self, button: Button, interaction: discord.Interaction):
-        modal = DonateModal()
-        await interaction.response.send_modal(modal)
-
-    @discord.ui.button(label="📝 Misiones", style=discord.ButtonStyle.secondary, custom_id="main:missions")
-    async def missions_button(self, button: Button, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        
-        missions = await asyncio.to_thread(db.get_daily_missions, interaction.user.id)
-        if not missions:
-            await interaction.followup.send("No hay misiones disponibles en este momento. Inténtalo más tarde.", ephemeral=True)
-            return
-            
-        embed = discord.Embed(
-            title="📝 Tus Misiones Diarias",
-            description="Completa estas misiones para ganar LBucks.",
-            color=discord.Color.blue()
-        )
-        
-        for m in missions:
-            status_emoji = "✅" if m['is_completed'] else "⌛"
-            progress_text = f"({m['progress']}/{m['target_value']})" if not m['is_completed'] else ""
-            
-            embed.add_field(
-                name=f"{status_emoji} {m['description']}",
-                value=f"Recompensa: **{m['reward']} LBucks** {progress_text}",
-                inline=False
-            )
-            
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-
-# Fuera de las clases View, añade esta nueva clase
 class DonateModal(discord.ui.Modal):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs, title="Donar LBucks")
         
-        # Define los campos de texto dentro del constructor
         self.amount_input = discord.ui.InputText(
             label="Cantidad de LBucks",
             placeholder="Introduce la cantidad a donar",
@@ -131,7 +43,6 @@ class DonateModal(discord.ui.Modal):
             style=discord.InputTextStyle.short
         )
         
-        # Agrega los campos al modal
         self.add_item(self.amount_input)
         self.add_item(self.recipient_input)
 
@@ -163,8 +74,8 @@ class DonateModal(discord.ui.Modal):
                 await interaction.followup.send("No tienes suficientes LBucks para donar.", ephemeral=True)
                 return
             
-            db.update_lbucks(interaction.user.id, -amount)
-            db.update_lbucks(recipient.id, amount)
+            await asyncio.to_thread(db.update_lbucks, interaction.user.id, -amount)
+            await asyncio.to_thread(db.update_lbucks, recipient.id, amount)
             
             await interaction.followup.send(f"Has donado **{amount} LBucks** a **{recipient.name}**. ¡Gracias por tu generosidad! 🎉", ephemeral=True)
 
@@ -174,7 +85,6 @@ class DonateModal(discord.ui.Modal):
             print(f"Error en el modal de donación: {e}")
             await interaction.followup.send("Ocurrió un error al procesar tu donación. Intenta de nuevo más tarde.", ephemeral=True)
             
-# Código corregido para la clase RedeemMenuView
 class RedeemMenuView(View):
     def __init__(self, items):
         super().__init__(timeout=300)
@@ -187,17 +97,13 @@ class RedeemMenuView(View):
                 style=discord.ButtonStyle.blurple,
                 disabled=(stock <= 0)
             )
-            # El botón ahora tiene una función de callback que maneja el clic
             button.callback = self.handle_redeem_click
             self.add_item(button)
 
     async def handle_redeem_click(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-
         custom_id = interaction.data['custom_id']
         item_id = custom_id.replace("redeem_", "")
-        
-        # Llamada asíncrona a la base de datos
         item = await asyncio.to_thread(db.get_item, item_id)
         
         if not item:
@@ -221,7 +127,6 @@ class ConfirmCancelView(View):
     @discord.ui.button(label="Confirmar Canjeo", style=discord.ButtonStyle.success)
     async def confirm_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        # Llamadas asíncronas a la base de datos
         balance = await asyncio.to_thread(db.get_balance, self.user_id)
         item_data = await asyncio.to_thread(db.get_item, self.item_id)
         
@@ -326,12 +231,8 @@ async def on_ready():
         print(f"⚠️ Error al inicializar la base de datos: {e}")
 
     try:
-        # Creamos una única instancia de la vista
-        bot.main_menu_view = MainMenuView()
-        
-        # Registramos la vista para que el bot la reconozca después de reinicios
+        # Se registra la vista para que el bot la reconozca después de reinicios
         if not hasattr(bot, "persistent_views_added"):
-            bot.add_view(bot.main_menu_view)
             bot.add_view(AdminActionView())
             bot.persistent_views_added = True
             print("👁️ Vistas persistentes registradas.")
@@ -344,20 +245,20 @@ async def on_ready():
 async def mission_message_tracker(message):
     if message.author.bot:
         return
-    db.update_mission_progress(message.author.id, "message_count")
+    await asyncio.to_thread(db.update_mission_progress, message.author.id, "message_count")
 
 @bot.listen("on_raw_reaction_add")
 async def mission_reaction_tracker(payload):
     if payload.member.bot:
         return
-    db.update_mission_progress(payload.member.id, "reaction_add")
+    await asyncio.to_thread(db.update_mission_progress, payload.member.id, "reaction_add")
 
 
 @bot.listen("on_application_command")
 async def mission_slash_command_tracker(ctx):
     if ctx.author.bot:
         return
-    db.update_mission_progress(ctx.author.id, "slash_command_use")
+    await asyncio.to_thread(db.update_mission_progress, ctx.author.id, "slash_command_use")
 
 # Después del nuevo listener de slash commands
 @bot.listen("on_voice_state_update")
@@ -367,100 +268,155 @@ async def mission_voice_tracker(member, before, after):
     
     # Si el usuario se une a un canal de voz
     if before.channel is None and after.channel is not None:
-        db.update_mission_progress(member.id, "voice_minutes", progress_increase=0) # Para inicializar
+        await asyncio.to_thread(db.update_mission_progress, member.id, "voice_minutes", progress_increase=0) # Para inicializar
         
     # Si el usuario se desconecta del canal de voz
     if before.channel is not None and after.channel is None:
         # Aquí iría una lógica más compleja para calcular el tiempo
         # Pero para una misión simple, podemos asumir el progreso
-        db.update_mission_progress(member.id, "voice_minutes", progress_increase=1)
+        await asyncio.to_thread(db.update_mission_progress, member.id, "voice_minutes", progress_increase=1)
 
-# Código corregido para la función evento
-@bot.slash_command(guild_ids=[GUILD_ID], name="evento", description="Muestra el menú principal del evento.")
-async def evento(ctx: discord.ApplicationContext):
-    # La respuesta inicial se hace con defer para evitar timeouts.
+
+# -------------------------------------------------------------
+#  NUEVOS COMANDOS DE BARRA
+# -------------------------------------------------------------
+
+# Código corregido para la función ayuda
+@bot.slash_command(guild_ids=[GUILD_ID], name="ayuda", description="Muestra el menú principal y la información del bot.")
+async def ayuda(ctx: discord.ApplicationContext):
     await ctx.defer(ephemeral=True)
-    
     embed = discord.Embed(
-        title="🎉 ¡𝑩𝒊𝒆𝒏𝒗𝒆𝒏𝒊𝒅𝒐 𝒂𝒍 𝑬𝒗𝒆𝒏𝒕𝒐 𝒅𝒆 𝑹𝒐𝒃𝒖𝒙 𝑷𝒓𝒐𝒑𝒐𝒓𝒄𝒊𝒐𝒏𝒂𝒅𝒐 𝒑𝒐𝒓 𝑳𝒆𝒈𝒆𝒏𝒅𝒔 𝑨𝒄𝒄𝒐𝒖𝒏𝒕! 🎉",
-        description="𝑷𝒂𝒓𝒕𝒊𝒄𝒊𝒑𝒂 𝒑𝒂𝒓𝒂 𝒈𝒂𝒏𝒂𝒓 𝑹𝒐𝒃𝒖𝒙 𝒈𝒓𝒂𝒕𝒊𝒔! 𝑼𝒔𝒂 𝒍𝒐𝒔 𝒃𝒐𝒕𝒐𝒏𝒆𝒔 𝒅𝒆 𝒂𝒃𝒂𝒋𝒐 𝒑𝒂𝒓𝒂 𝒊𝒏𝒕𝒆𝒓𝒂𝒄𝒕𝒖𝒂𝒓 𝒚 𝒄𝒐𝒎𝒆𝒏𝒛𝒂𝒓 𝒕𝒖 𝒂𝒗𝒆𝒏𝒕𝒖𝒓𝒂. ¡𝑴𝒖𝒄𝒉𝒂 𝒔𝒖𝒆𝒓𝒕𝒆!",
-        color=discord.Color.gold()
+        title="📚 𝑮𝒖𝒊́𝒂 𝒅𝒆 𝒄𝒐𝒎𝒂𝒏𝒅𝒐𝒔",
+        description="Aquí tienes todos los comandos disponibles para participar en el evento.",
+        color=discord.Color.blue()
     )
-    
-    if ctx.guild.icon:
-        embed.set_thumbnail(url=ctx.guild.icon.url)
-    
+    embed.set_thumbnail(url=ctx.guild.icon.url)
     embed.add_field(
-        name="☀️ Login Diario",
+        name="🎉 `/evento`",
+        value="Muestra el menú principal del evento para iniciar tu aventura.",
+        inline=False
+    )
+    embed.add_field(
+        name="☀️ `/login_diario`",
         value="Reclama 5 LBucks cada 24 horas. ¡Es la forma más fácil de ganar!",
         inline=False
     )
     embed.add_field(
-        name="🏪 Centro de Canjeo",
-        value="Canjea tus LBucks por Robux y otros premios en la tienda.",
+        name="🏪 `/canjear`",
+        value="Abre el Centro de Canjeo para intercambiar tus LBucks por Robux y otros premios.",
         inline=False
     )
     embed.add_field(
-        name="💵 Ver saldo",
-        value="Consulta tu saldo de LBucks en cualquier momento para saber cuánto tienes.",
+        name="💵 `/saldo`",
+        value="Consulta tu saldo de LBucks en cualquier momento.",
         inline=False
     )
     embed.add_field(
-        name="🎁 Donar",
-        value="Comparte tu riqueza. Dona LBucks a otros usuarios del servidor.",
+        name="🎁 `/donar`",
+        value="Comparte tu riqueza. Dona LBucks a otro usuario del servidor.",
         inline=False
     )
     embed.add_field(
-        name="📝 Misiones",
-        value="Completa misiones diarias para ganar recompensas adicionales.",
+        name="📝 `/misiones`",
+        value="Consulta tus misiones diarias y el progreso para ganar recompensas adicionales.",
+        inline=False
+    )
+    embed.add_field(
+        name="➕ Robux Pendientes",
+        value="""Para ver tus Robux pendientes de canje, ve a la página web de Roblox, haz clic en el ícono de Robux y luego en **"Mis transacciones"**. . Los Robux pendientes estarán visibles en el apartado de "Robux pendientes". .""",
         inline=False
     )
 
-    embed.set_footer(text="¡Gracias por participar en nuestro evento!")
-    
-    # Se envía una única respuesta de seguimiento.
-    await ctx.followup.send(embed=embed, view=bot.main_menu_view, ephemeral=True)
+    await ctx.followup.send(embed=embed, ephemeral=True)
 
-# Nuevo comando para consultar saldo
+
+# Nuevo comando para el login diario
+@bot.slash_command(guild_ids=[GUILD_ID], name="login_diario", description="Reclama tu recompensa diaria de 5 LBucks.")
+async def daily_command(ctx: discord.ApplicationContext):
+    await ctx.defer(ephemeral=True)
+    try:
+        user_id = ctx.user.id
+        user_data = await asyncio.to_thread(db.get_user, user_id)
+        
+        if user_data is None:
+            await ctx.followup.send("Error al obtener tus datos. Intenta de nuevo.", ephemeral=True)
+            return
+        
+        last_claim_time = user_data[2]
+        
+        if isinstance(last_claim_time, str):
+            try:
+                last_claim_time = datetime.datetime.fromisoformat(last_claim_time).replace(tzinfo=datetime.timezone.utc)
+            except ValueError:
+                last_claim_time = None
+
+        if isinstance(last_claim_time, datetime.datetime) and (datetime.datetime.now(datetime.UTC) - last_claim_time < datetime.timedelta(hours=24)):
+            time_left = datetime.timedelta(hours=24) - (datetime.datetime.now(datetime.UTC) - last_claim_time)
+            hours, rem = divmod(int(time_left.total_seconds()), 3600)
+            minutes, _ = divmod(rem, 60)
+            await ctx.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.", ephemeral=True)
+            return
+
+        await asyncio.to_thread(db.update_lbucks, user_id, 5)
+        await asyncio.to_thread(db.update_daily_claim, user_id)
+        await ctx.followup.send("¡Has recibido 5 LBucks! 🪙", ephemeral=True)
+
+    except Exception as e:
+        print(f"🚨 Error inesperado en daily_command: {e}")
+        await ctx.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.", ephemeral=True)
+
+
+# Nuevo comando para canjear
+@bot.slash_command(guild_ids=[GUILD_ID], name="canjear", description="Abre el centro de canjeo para canjear LBucks por Robux.")
+async def canjear(ctx: discord.ApplicationContext):
+    await ctx.defer(ephemeral=True)
+    items = await asyncio.to_thread(db.get_shop_items) or []
+    await ctx.followup.send("Abriendo el Centro de Canjeo...", view=RedeemMenuView(items), ephemeral=True)
+
+
+# Nuevo comando para ver saldo
 @bot.slash_command(guild_ids=[GUILD_ID], name="saldo", description="Consulta tu saldo actual de LBucks.")
 async def saldo(ctx: discord.ApplicationContext):
-    balance = db.get_balance(ctx.user.id)
+    await ctx.defer(ephemeral=True)
+    balance = await asyncio.to_thread(db.get_balance, ctx.user.id)
+    await ctx.followup.send(f"Tu saldo actual es: **{balance} LBucks** 🪙", ephemeral=True)
+
+
+# Nuevo comando para donar
+@bot.slash_command(guild_ids=[GUILD_ID], name="donar", description="Dona LBucks a otro usuario.")
+async def donar(ctx: discord.ApplicationContext):
+    modal = DonateModal()
+    await ctx.response.send_modal(modal)
+
+
+# Nuevo comando para ver misiones
+@bot.slash_command(guild_ids=[GUILD_ID], name="misiones", description="Muestra tus misiones diarias.")
+async def misiones(ctx: discord.ApplicationContext):
+    await ctx.defer(ephemeral=True)
+    missions = await asyncio.to_thread(db.get_daily_missions, ctx.user.id)
+    if not missions:
+        await ctx.followup.send("No hay misiones disponibles en este momento. Inténtalo más tarde.", ephemeral=True)
+        return
+        
     embed = discord.Embed(
-        title="💰 Tu saldo actual",
-        description=f"Tienes **{balance} LBucks** disponibles.",
+        title="📝 Tus Misiones Diarias",
+        description="Completa estas misiones para ganar LBucks.",
         color=discord.Color.blue()
     )
-    class RefreshBalanceView(View):
-        @discord.ui.button(label="Actualizar saldo", style=discord.ButtonStyle.secondary)
-        async def refresh(self, button: Button, interaction: discord.Interaction):
-            new_balance = db.get_balance(interaction.user.id)
-            new_embed = discord.Embed(
-                title="💰 Tu saldo actual",
-                description=f"Tienes **{new_balance} LBucks** disponibles.",
-                color=discord.Color.blue()
-            )
-            await interaction.response.edit_message(embed=new_embed)
-    await ctx.respond(embed=embed, view=RefreshBalanceView(), ephemeral=True)
-
-admin_commands = bot.create_group("admin", "Comandos de administración", guild_ids=[GUILD_ID])
-
-# Código corregido para la función add_lbucks
-@admin_commands.command(name="add_lbucks", description="Añade LBucks a un usuario.")
-@discord.default_permissions(administrator=True)
-async def add_lbucks(ctx: discord.ApplicationContext, usuario: discord.Member, cantidad: int):
-    # Obtener el rol de administrador del servidor
-    admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
     
-    # Si el rol no existe o el usuario no lo tiene, denegar el permiso
-    if admin_role is None or admin_role not in ctx.author.roles:
-        return await ctx.respond("No tienes el rol de administrador para usar este comando.", ephemeral=True)
-    
-    await ctx.defer(ephemeral=True)
-    
-    # ... El resto de tu lógica ...
-    db.update_lbucks(usuario.id, cantidad)
-    await ctx.followup.send(f"Se han añadido {cantidad} LBucks a {usuario.mention}.", ephemeral=True)
+    for m in missions:
+        status_emoji = "✅" if m['is_completed'] else "⌛"
+        progress_text = f"({m['progress']}/{m['target_value']})" if not m['is_completed'] else ""
+        
+        embed.add_field(
+            name=f"{status_emoji} {m['description']}",
+            value=f"Recompensa: **{m['reward']} LBucks** {progress_text}",
+            inline=False
+        )
+        
+    await ctx.followup.send(embed=embed, ephemeral=True)
 
+# ... (resto de tu código sin cambios)
 # --- SERVIDOR WEB Y EJECUCIÓN ---
 app = Flask('')
 @app.route('/')
@@ -471,7 +427,6 @@ def run_web_server():
     serve(app, host="0.0.0.0", port=8080)
 
 def run_bot():
-    # Registrar vistas persistentes justo antes de iniciar el bot
     bot.run(TOKEN)
 
 if __name__ == "__main__":
