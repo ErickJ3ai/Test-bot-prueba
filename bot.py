@@ -36,7 +36,7 @@ class MainMenuView(View):
                 await interaction.followup.send("Error al obtener tus datos. Intenta de nuevo.", ephemeral=True)
                 return
 
-            last_claim_time = user_data
+            last_claim_time = user_data[2]
 
             if isinstance(last_claim_time, str):
                 try:
@@ -103,72 +103,10 @@ class MainMenuView(View):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-class DonateModal(discord.ui.Modal):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs, title="Donar LBucks")
-
-        self.amount_input = discord.ui.InputText(
-            label="Cantidad de LBucks",
-            placeholder="Introduce la cantidad a donar",
-            min_length=1,
-            max_length=10,
-            style=discord.InputTextStyle.short
-        )
-        self.recipient_input = discord.ui.InputText(
-            label="Destinatario (ID o nombre de usuario)",
-            placeholder="Introduce el ID o nombre de usuario de la persona",
-            min_length=1,
-            max_length=32,
-            style=discord.InputTextStyle.short
-        )
-
-        self.add_item(self.amount_input)
-        self.add_item(self.recipient_input)
-
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        try:
-            amount = int(self.amount_input.value)
-            recipient_str = self.recipient_input.value
-
-            if recipient_str.isdigit():
-                recipient = await bot.fetch_user(int(recipient_str))
-            else:
-                recipient = discord.utils.get(interaction.guild.members, name=recipient_str)
-
-            if recipient is None:
-                await interaction.followup.send("No se pudo encontrar al destinatario.", ephemeral=True)
-                return
-
-            if amount <= 0:
-                await interaction.followup.send("La cantidad a donar debe ser un número positivo.", ephemeral=True)
-                return
-
-            if interaction.user.id == recipient.id:
-                await interaction.followup.send("No puedes donarte LBucks a ti mismo.", ephemeral=True)
-                return
-
-            doner_balance = db.get_balance(interaction.user.id)
-            if doner_balance < amount:
-                await interaction.followup.send("No tienes suficientes LBucks para donar.", ephemeral=True)
-                return
-
-            await asyncio.to_thread(db.update_lbucks, interaction.user.id, -amount)
-            await asyncio.to_thread(db.update_lbucks, recipient.id, amount)
-
-            await interaction.followup.send(f"Has donado **{amount} LBucks** a **{recipient.name}**. ¡Gracias por tu generosidad! 🎉", ephemeral=True)
-
-        except ValueError:
-            await interaction.followup.send("La cantidad debe ser un número válido.", ephemeral=True)
-        except Exception as e:
-            print(f"Error en el modal de donación: {e}")
-            await interaction.followup.send("Ocurrió un error al procesar tu donación. Intenta de nuevo más tarde.", ephemeral=True)
-
 class RedeemMenuView(View):
     def __init__(self, items):
         super().__init__(timeout=300)
         self.items = items
-        # Organizar los botones en filas para mejor presentación
         for i, (item_id, price, stock) in enumerate(self.items):
             robux_amount = item_id.split('_')[0]
             label = f"{robux_amount} ⏣ ({price} LBucks)"
@@ -180,9 +118,6 @@ class RedeemMenuView(View):
             )
             button.callback = self.handle_redeem_click
             self.add_item(button)
-            # Añadir una fila después de cada 3 botones (ajusta según prefieras)
-            # if (i + 1) % 3 == 0 and i < len(self.items) - 1:
-            #     self.add_item(discord.ui.Button(label="", disabled=True, style=discord.ButtonStyle.grey)) # Espaciador
 
     async def handle_redeem_click(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -195,12 +130,10 @@ class RedeemMenuView(View):
         if not item:
             return await interaction.followup.send("Este item ya no existe.", ephemeral=True)
 
-        view = ConfirmCancelView(user_id=interaction.user.id, item_id=item_id, price=item
-
- [1])
+        view = ConfirmCancelView(user_id=interaction.user.id, item_id=item_id, price=item[1])
         await interaction.followup.send(
-            f"¿Confirmas el canje de **{item}** "
-            f"por **{item} LBucks**?",
+            f"¿Confirmas el canje de **{item[0].split('_')[0]} Robux** "
+            f"por **{item[1]} LBucks**?",
             view=view,
             ephemeral=True
         )
@@ -218,7 +151,7 @@ class ConfirmCancelView(View):
         balance = await asyncio.to_thread(db.get_balance, self.user_id)
         item_data = await asyncio.to_thread(db.get_item, self.item_id)
 
-        if not item_data or item_data <= 0:
+        if not item_data or item_data[2] <= 0:
             await interaction.followup.send("¡Justo se agotó! Alguien más fue más rápido.")
             return
         if balance < self.price:
@@ -259,21 +192,21 @@ class AdminActionView(View):
             return await interaction.followup.send("No tienes permiso.", ephemeral=True)
 
         redemption = db.get_redemption_by_message(interaction.message.id)
-        if not redemption or redemption != 'pending':
+        if not redemption or redemption[4] != 'pending':
             return await interaction.edit_original_response(content="Este canjeo ya fue procesado.", view=None, embed=None)
 
-        await asyncio.to_thread(db.update_redemption_status, redemption, 'completed')
-        user = await bot.fetch_user(redemption)
-        item_name = redemption + " Robux"
+        await asyncio.to_thread(db.update_redemption_status, redemption[0], 'completed')
+        user = await bot.fetch_user(redemption[1])
+        item_name = redemption[2].split('_')[0] + " Robux"
         try:
             await user.send(f"✅ ¡Tu canjeo de **{item_name}** ha sido completado!")
         except discord.Forbidden:
             pass
 
-        edited_embed = interaction.message.embeds
-        edited_embed = "✅ Canjeo Completado"
-        edited_embed = discord.Color.green()
-        edited_embed = interaction.user.mention
+        edited_embed = interaction.message.embeds[0]
+        edited_embed.title = "✅ Canjeo Completado"
+        edited_embed.color = discord.Color.green()
+        edited_embed.add_field(name="Procesado por", value=interaction.user.mention, inline=False)
         await interaction.edit_original_response(embed=edited_embed, view=None)
 
     @discord.ui.button(label="Rechazar", style=discord.ButtonStyle.danger, custom_id="persistent:admin_cancel")
@@ -284,27 +217,68 @@ class AdminActionView(View):
             return await interaction.followup.send("No tienes permiso.", ephemeral=True)
 
         redemption = db.get_redemption_by_message(interaction.message.id)
-        if not redemption or redemption != 'pending':
+        if not redemption or redemption[4] != 'pending':
             return await interaction.edit_original_response(content="Este canjeo ya fue procesado.", view=None, embed=None)
 
-        item = await asyncio.to_thread(db.get_item, redemption)
+        item = await asyncio.to_thread(db.get_item, redemption[2])
         if item:
-            await asyncio.to_thread(db.update_lbucks, redemption, item)
-            await asyncio.to_thread(db.update_stock, redemption, 1)
+            await asyncio.to_thread(db.update_lbucks, redemption[1], item[1])
+            await asyncio.to_thread(db.update_stock, redemption[2], 1)
 
-        await asyncio.to_thread(db.update_redemption_status, redemption, 'cancelled_by_admin')
-        user = await bot.fetch_user(redemption)
-        item_name = redemption + " Robux"
+        await asyncio.to_thread(db.update_redemption_status, redemption[0], 'cancelled_by_admin')
+        user = await bot.fetch_user(redemption[1])
+        item_name = redemption[2].split('_')[0] + " Robux"
         try:
             await user.send(f"❌ Tu canjeo de **{item_name}** fue cancelado. Tus LBucks han sido devueltos.")
         except discord.Forbidden:
             pass
 
-        edited_embed = interaction.message.embeds
-        edited_embed = "❌ Canjeo Cancelado por Admin"
-        edited_embed = discord.Color.dark_grey()
-        edited_embed = interaction.user.mention
+        edited_embed = interaction.message.embeds[0]
+        edited_embed.title = "❌ Canjeo Cancelado por Admin"
+        edited_embed.color = discord.Color.dark_grey()
+        edited_embed.add_field(name="Cancelado por", value=interaction.user.mention, inline=False)
         await interaction.edit_original_response(embed=edited_embed, view=None)
+
+class UpdateBalanceView(View):
+    def __init__(self):
+        super().__init__(timeout=300)
+    
+    @discord.ui.button(label="🔄 Actualizar Saldo", style=discord.ButtonStyle.blurple, custom_id="update:balance")
+    async def update_balance_button(self, button: Button, interaction: discord.Interaction):
+        await interaction.response.defer()
+        balance = await asyncio.to_thread(db.get_balance, interaction.user.id)
+        await interaction.edit_original_response(content=f"Tu saldo actual es: **{balance} LBucks** 🪙", view=self)
+
+class UpdateMissionsView(View):
+    def __init__(self):
+        super().__init__(timeout=300)
+
+    @discord.ui.button(label="🔄 Actualizar Misiones", style=discord.ButtonStyle.blurple, custom_id="update:missions")
+    async def update_missions_button(self, button: Button, interaction: discord.Interaction):
+        await interaction.response.defer()
+        
+        missions = await asyncio.to_thread(db.get_daily_missions, interaction.user.id)
+        if not missions:
+            await interaction.followup.send("No hay misiones disponibles en este momento. Inténtalo más tarde.", ephemeral=True)
+            return
+            
+        embed = discord.Embed(
+            title="📝 Tus Misiones Diarias",
+            description="Completa estas misiones para ganar LBucks.",
+            color=discord.Color.blue()
+        )
+        
+        for m in missions:
+            status_emoji = "✅" if m['is_completed'] else "⌛"
+            progress_text = f"({m['progress']}/{m['target_value']})" if not m['is_completed'] else ""
+            
+            embed.add_field(
+                name=f"{status_emoji} {m['description']}",
+                value=f"Recompensa: **{m['reward']} LBucks** {progress_text}",
+                inline=False
+            )
+            
+        await interaction.edit_original_response(embed=embed, view=self)
 
 
 # --- EVENTOS ---
@@ -321,6 +295,8 @@ async def on_ready():
     try:
         if not hasattr(bot, "persistent_views_added"):
             bot.add_view(AdminActionView())
+            bot.add_view(UpdateBalanceView())
+            bot.add_view(UpdateMissionsView())
             bot.persistent_views_added = True
             print("👁️ Vistas persistentes registradas.")
     except Exception as e:
@@ -357,7 +333,7 @@ async def mission_voice_tracker(member, before, after):
 
 
 # -------------------------------------------------------------
-#  NUEVOS COMANDOS DE BARRA
+#  COMANDOS DE BARRA
 # -------------------------------------------------------------
 @bot.slash_command(guild_ids=[GUILD_ID], name="ayuda", description="Muestra el menú principal y la información del bot.")
 async def ayuda(ctx: discord.ApplicationContext):
@@ -399,7 +375,7 @@ async def ayuda(ctx: discord.ApplicationContext):
         inline=False
     )
     embed.set_footer(text="¡Gracias por participar en nuestro evento! 🎉")
-
+    
     await ctx.followup.send(embed=embed, ephemeral=True)
 
 @bot.slash_command(guild_ids=[GUILD_ID], name="login_diario", description="Reclama tu recompensa diaria de 5 LBucks.")
@@ -413,7 +389,7 @@ async def daily_command(ctx: discord.ApplicationContext):
             await ctx.followup.send("Error al obtener tus datos. Intenta de nuevo.", ephemeral=True)
             return
 
-        last_claim_time = user_data
+        last_claim_time = user_data[2]
 
         if isinstance(last_claim_time, str):
             try:
@@ -446,7 +422,7 @@ async def canjear(ctx: discord.ApplicationContext):
 async def saldo(ctx: discord.ApplicationContext):
     await ctx.defer(ephemeral=True)
     balance = await asyncio.to_thread(db.get_balance, ctx.user.id)
-    await ctx.followup.send(f"Tu saldo actual es: **{balance} LBucks** 🪙", ephemeral=True)
+    await ctx.followup.send(f"Tu saldo actual es: **{balance} LBucks** 🪙", view=UpdateBalanceView(), ephemeral=True)
 
 @bot.slash_command(guild_ids=[GUILD_ID], name="donar", description="Dona LBucks a otro usuario.")
 async def donar(ctx: discord.ApplicationContext):
@@ -477,7 +453,7 @@ async def misiones(ctx: discord.ApplicationContext):
             inline=False
         )
 
-    await ctx.followup.send(embed=embed, ephemeral=True)
+    await ctx.followup.send(embed=embed, view=UpdateMissionsView(), ephemeral=True)
 
 admin_commands = bot.create_group("admin", "Comandos de administración", guild_ids=[GUILD_ID])
 
