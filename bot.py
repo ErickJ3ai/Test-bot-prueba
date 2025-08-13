@@ -11,6 +11,8 @@ from waitress import serve
 import database as db
 from config import GUILD_ID, ADMIN_ROLE_NAME, REDEMPTION_LOG_CHANNEL_ID
 import asyncio
+import random
+import aiohttp
 
 # --- CONFIGURACIÓN E INICIALIZACIÓN ---
 load_dotenv()
@@ -19,6 +21,23 @@ intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
 bot = discord.Bot(intents=intents)
+
+# --- JUEGOS Y GESTIÓN DE ESTADO ---
+number_games = {}
+word_games = {}
+# Las palabras se obtendrán de una API para evitar repeticiones
+async def get_random_word_from_api():
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://random-word-api.herokuapp.com/word?number=1&lang=es") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data[0]
+                else:
+                    return None
+    except Exception as e:
+        print(f"Error al obtener palabra de la API: {e}")
+        return None
 
 # --- VISTAS DE BOTONES (UI) ---
 class DonateModal(discord.ui.Modal):
@@ -236,7 +255,6 @@ class UpdateMissionsView(View):
         
         missions = await asyncio.to_thread(db.get_daily_missions, interaction.user.id)
         
-        # Si no hay misiones, se envía un mensaje de respuesta directa en lugar de editar.
         if not missions:
             await interaction.response.send_message("No hay misiones disponibles en este momento. Inténtalo más tarde.", ephemeral=True)
             return
@@ -257,7 +275,6 @@ class UpdateMissionsView(View):
                 inline=False
             )
             
-        # Usa edit_message para actualizar el mensaje de forma instantánea.
         await interaction.response.edit_message(embed=embed, view=self)
 
 
@@ -265,13 +282,13 @@ class UpdateMissionsView(View):
 @bot.event
 async def on_ready():
     print(f"✅ BOT '{bot.user}' CONECTADO Y LISTO")
-
+    
     try:
         await asyncio.to_thread(db.init_db)
         print("✔️ Base de datos inicializada.")
     except Exception as e:
         print(f"⚠️ Error al inicializar la base de datos: {e}")
-
+        
     try:
         if not hasattr(bot, "persistent_views_added"):
             bot.add_view(AdminActionView())
@@ -282,6 +299,39 @@ async def on_ready():
     except Exception as e:
         print(f"⚠️ Error al registrar vistas persistentes: {e}")
 
+    print("Caché de invitaciones...")
+    for guild in bot.guilds:
+        try:
+            invites_cache[guild.id] = await guild.invites()
+        except discord.Forbidden:
+            print(f"Error: Permisos faltantes para leer invitaciones en el servidor {guild.name}")
+
+@bot.event
+async def on_member_join(member):
+    await asyncio.sleep(5)
+    try:
+        new_invites = await member.guild.invites()
+        old_invites = invites_cache.get(member.guild.id, [])
+        used_invite = None
+        
+        for new_invite in new_invites:
+            for old_invite in old_invites:
+                if new_invite.code == old_invite.code and new_invite.uses > old_invite.uses:
+                    used_invite = new_invite
+                    break
+            if used_invite:
+                break
+
+        if used_invite and used_invite.inviter:
+            inviter = used_invite.inviter
+            await asyncio.to_thread(db.check_and_update_invite_reward, used_invite.code, inviter.id)
+
+    except Exception as e:
+        print(f"Error en on_member_join: {e}")
+    finally:
+        invites_cache[member.guild.id] = await member.guild.invites()
+
+# --- MANEJADOR DE COMPONENTES CON CUSTOM_ID ---
 @bot.listen("on_message")
 async def mission_message_tracker(message):
     if message.author.bot:
@@ -304,59 +354,38 @@ async def mission_slash_command_tracker(ctx):
 async def mission_voice_tracker(member, before, after):
     if member.bot:
         return
-
     if before.channel is None and after.channel is not None:
         await asyncio.to_thread(db.update_mission_progress, member.id, "voice_minutes", progress_increase=0)
-
     if before.channel is not None and after.channel is None:
         await asyncio.to_thread(db.update_mission_progress, member.id, "voice_minutes", progress_increase=1)
 
 
-# -------------------------------------------------------------
-#  COMANDOS DE BARRA
-# -------------------------------------------------------------
+# --- COMANDOS DE BARRA ---
 @bot.slash_command(guild_ids=[GUILD_ID], name="ayuda", description="Muestra el menú principal y la información del bot.")
 async def ayuda(ctx: discord.ApplicationContext):
     await ctx.defer(ephemeral=True)
     embed = discord.Embed(
-        title="📚 𝑮𝒖𝒊́𝒂 𝒅𝒆 𝒄𝒐𝒎𝒂𝒏𝒅𝒐𝐬",
+        title="📚 𝑮𝒖𝒊́𝒂 𝒅𝒆 𝒄𝒐𝒎𝒂𝒏𝒅𝐨𝐬",
         description="Aquí tienes todos los comandos disponibles para participar en el evento.",
         color=discord.Color.blue()
     )
     embed.set_thumbnail(url=ctx.guild.icon.url)
-    embed.add_field(
-        name="☀️ `/login_diario`",
-        value="Reclama 5 LBucks cada 24 horas. ¡Es la forma más fácil de ganar!",
-        inline=False
-    )
-    embed.add_field(
-        name="🏪 `/canjear`",
-        value="Abre el Centro de Canjeo para intercambiar tus LBucks por Robux y otros premios.",
-        inline=False
-    )
-    embed.add_field(
-        name="💵 `/saldo`",
-        value="Consulta tu saldo de LBucks en cualquier momento.",
-        inline=False
-    )
-    embed.add_field(
-        name="🎁 `/donar`",
-        value="Dona LBucks a otro usuario del servidor.",
-        inline=False
-    )
-    embed.add_field(
-        name="📝 `/misiones`",
-        value="Consulta tus misiones diarias y el progreso para ganar recompensas adicionales.",
-        inline=False
-    )
+    embed.add_field(name="☀️ `/login_diario`", value="Reclama 5 LBucks cada 24 horas. ¡Es la forma más fácil de ganar!", inline=False)
+    embed.add_field(name="🏪 `/canjear`", value="Abre el Centro de Canjeo para intercambiar tus LBucks por Robux y otros premios.", inline=False)
+    embed.add_field(name="💵 `/saldo`", value="Consulta tu saldo de LBucks en cualquier momento.", inline=False)
+    embed.add_field(name="🎁 `/donar`", value="Dona LBucks a otro usuario del servidor.", inline=False)
+    embed.add_field(name="📝 `/misiones`", value="Consulta tus misiones diarias y el progreso para ganar recompensas adicionales.", inline=False)
+    embed.add_field(name="🕹️ `/adivinar_numero`", value="Inicia un juego para adivinar un número aleatorio y ganar LBucks.", inline=False)
+    embed.add_field(name="📚 `/adivinar_palabra`", value="Inicia una partida para adivinar una palabra aleatoria.", inline=False)
+    embed.add_field(name="👤 `/invitaciones`", value="Revisa la cantidad de personas que has invitado y tu recompensa.", inline=False)
     embed.add_field(
         name="➕ Robux Pendientes",
         value="""Para ver tus Robux pendientes de canje, ve a la página web de Roblox, haz clic en el ícono de Robux y luego en **"Mis transacciones"**. Los Robux pendientes estarán visibles en el apartado de **"Robux pendientes"** .""",
         inline=False
     )
     embed.set_footer(text="¡Gracias por participar en nuestro evento! 🎉")
-    
     await ctx.followup.send(embed=embed, ephemeral=True)
+
 
 @bot.slash_command(guild_ids=[GUILD_ID], name="login_diario", description="Reclama tu recompensa diaria de 5 LBucks.")
 async def daily_command(ctx: discord.ApplicationContext):
@@ -364,33 +393,28 @@ async def daily_command(ctx: discord.ApplicationContext):
     try:
         user_id = ctx.user.id
         user_data = await asyncio.to_thread(db.get_user, user_id)
-
         if user_data is None:
             await ctx.followup.send("Error al obtener tus datos. Intenta de nuevo.", ephemeral=True)
             return
-
         last_claim_time = user_data[2]
-
         if isinstance(last_claim_time, str):
             try:
                 last_claim_time = datetime.datetime.fromisoformat(last_claim_time).replace(tzinfo=datetime.timezone.utc)
             except ValueError:
                 last_claim_time = None
-
         if isinstance(last_claim_time, datetime.datetime) and (datetime.datetime.now(datetime.UTC) - last_claim_time < datetime.timedelta(hours=24)):
             time_left = datetime.timedelta(hours=24) - (datetime.datetime.now(datetime.UTC) - last_claim_time)
             hours, rem = divmod(int(time_left.total_seconds()), 3600)
             minutes, _ = divmod(rem, 60)
             await ctx.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.", ephemeral=True)
             return
-
         await asyncio.to_thread(db.update_lbucks, user_id, 5)
         await asyncio.to_thread(db.update_daily_claim, user_id)
         await ctx.followup.send("¡Has recibido 5 LBucks! 🪙", ephemeral=True)
-
     except Exception as e:
         print(f"🚨 Error inesperado en daily_command: {e}")
         await ctx.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.", ephemeral=True)
+
 
 @bot.slash_command(guild_ids=[GUILD_ID], name="canjear", description="Abre el centro de canjeo para canjear LBucks por Robux.")
 async def canjear(ctx: discord.ApplicationContext):
@@ -398,16 +422,19 @@ async def canjear(ctx: discord.ApplicationContext):
     items = await asyncio.to_thread(db.get_shop_items) or []
     await ctx.followup.send("Abriendo el Centro de Canjeo...", view=RedeemMenuView(items), ephemeral=True)
 
+
 @bot.slash_command(guild_ids=[GUILD_ID], name="saldo", description="Consulta tu saldo actual de LBucks.")
 async def saldo(ctx: discord.ApplicationContext):
     await ctx.defer(ephemeral=True)
     balance = await asyncio.to_thread(db.get_balance, ctx.user.id)
     await ctx.followup.send(f"Tu saldo actual es: **{balance} LBucks** 🪙", view=UpdateBalanceView(), ephemeral=True)
 
+
 @bot.slash_command(guild_ids=[GUILD_ID], name="donar", description="Dona LBucks a otro usuario.")
 async def donar(ctx: discord.ApplicationContext):
     modal = DonateModal()
     await ctx.response.send_modal(modal)
+
 
 @bot.slash_command(guild_ids=[GUILD_ID], name="misiones", description="Muestra tus misiones diarias.")
 async def misiones(ctx: discord.ApplicationContext):
@@ -416,40 +443,106 @@ async def misiones(ctx: discord.ApplicationContext):
     if not missions:
         await ctx.followup.send("No hay misiones disponibles en este momento. Inténtalo más tarde.", ephemeral=True)
         return
-
-    embed = discord.Embed(
-        title="📝 Tus Misiones Diarias",
-        description="Completa estas misiones para ganar LBucks.",
-        color=discord.Color.blue()
-    )
-
+    embed = discord.Embed(title="📝 Tus Misiones Diarias", description="Completa estas misiones para ganar LBucks.", color=discord.Color.blue())
     for m in missions:
         status_emoji = "✅" if m['is_completed'] else "⌛"
         progress_text = f"({m['progress']}/{m['target_value']})" if not m['is_completed'] else ""
-
-        embed.add_field(
-            name=f"{status_emoji} {m['description']}",
-            value=f"Recompensa: **{m['reward']} LBucks** {progress_text}",
-            inline=False
-        )
-
+        embed.add_field(name=f"{status_emoji} {m['description']}", value=f"Recompensa: **{m['reward']} LBucks** {progress_text}", inline=False)
     await ctx.followup.send(embed=embed, view=UpdateMissionsView(), ephemeral=True)
 
-admin_commands = bot.create_group("admin", "Comandos de administración", guild_ids=[GUILD_ID])
 
+@bot.slash_command(guild_ids=[GUILD_ID], name="adivinar_numero", description="Inicia un juego para adivinar un número aleatorio y ganar LBucks.")
+async def guess_number_game(ctx: discord.ApplicationContext, guess: int=None):
+    user_id = ctx.user.id
+    if guess is None:
+        if user_id in number_games:
+            await ctx.respond("¡Ya tienes un juego en curso! Adivina un número o espera a que se acabe el tiempo.", ephemeral=True)
+            return
+        number_games[user_id] = {'number': random.randint(1, 100), 'guesses': 0, 'start_time': datetime.datetime.now(), 'pista_par_impar': random.choice(['par', 'impar'])}
+        pista_par_impar = "par" if number_games[user_id]['number'] % 2 == 0 else "impar"
+        await ctx.respond(f"¡He pensado en un número entre 1 y 100! Tienes 1 minuto para adivinarlo. La pista: Es un número **{pista_par_impar}**. 😉", ephemeral=True)
+    else:
+        if user_id not in number_games:
+            await ctx.respond("No tienes un juego en curso. Usa `/adivinar_numero` para empezar uno.", ephemeral=True)
+            return
+        game = number_games[user_id]
+        if datetime.datetime.now() - game['start_time'] > datetime.timedelta(minutes=1):
+            await ctx.respond(f"¡Se acabó el tiempo! El número era {game['number']}. Intenta de nuevo con `/adivinar_numero`.", ephemeral=True)
+            del number_games[user_id]
+            return
+        game['guesses'] += 1
+        if guess == game['number']:
+            reward = 25
+            await asyncio.to_thread(db.update_lbucks, user_id, reward)
+            await ctx.respond(f"¡Felicidades! Adivinaste el número {game['number']} en {game['guesses']} intentos. Has ganado **{reward} LBucks**. 🥳", ephemeral=True)
+            del number_games[user_id]
+        elif guess < game['number']:
+            await ctx.respond(f"Mi número es mayor. Inténtalo de nuevo.", ephemeral=True)
+        else:
+            await ctx.respond(f"Mi número es menor. Inténtalo de nuevo.", ephemeral=True)
+
+
+@bot.slash_command(guild_ids=[GUILD_ID], name="adivinar_palabra", description="Inicia una partida para adivinar una palabra oculta.")
+async def guess_word_game(ctx: discord.ApplicationContext):
+    user_id = ctx.user.id
+    if user_id in word_games:
+        await ctx.respond("¡Ya tienes una partida en curso! Intenta adivinar la palabra.", ephemeral=True)
+        return
+    word_to_guess = await get_random_word_from_api()
+    if not word_to_guess:
+        await ctx.respond("No se pudo obtener una palabra. Inténtalo de nuevo más tarde.", ephemeral=True)
+        return
+
+    word_games[user_id] = {'word': word_to_guess, 'guesses': [], 'start_time': datetime.datetime.now(), 'timer': 420, 'rounds': 10}
+    hint = "".join(["_" if letter.isalpha() else letter for letter in word_to_guess])
+    await ctx.respond(f"¡Partida iniciada! Tienes 7 minutos y 10 rondas para adivinar la palabra. Pista: `{hint}`", ephemeral=True)
+
+
+@bot.listen("on_message")
+async def guess_word_listener(message):
+    user_id = message.author.id
+    if user_id in word_games and not message.author.bot:
+        game = word_games[user_id]
+        if datetime.datetime.now() - game['start_time'] > datetime.timedelta(minutes=7) or game['rounds'] <= 0:
+            await message.channel.send(f"¡Se acabó el tiempo o las rondas para el juego de adivinar palabras de {message.author.mention}! La palabra era '{game['word']}'.")
+            del word_games[user_id]
+            return
+        if message.content.lower() == game['word']:
+            reward = 50
+            await asyncio.to_thread(db.update_lbucks, user_id, reward)
+            await message.channel.send(f"¡{message.author.mention} ha adivinado la palabra '{game['word']}'! Has ganado **{reward} LBucks**. 🥳")
+            del word_games[user_id]
+        else:
+            game['rounds'] -= 1
+            if game['rounds'] > 0:
+                await message.channel.send(f"¡Incorrecto, {message.author.mention}! Te quedan {game['rounds']} rondas.")
+            else:
+                await message.channel.send(f"¡Se acabaron las rondas! La palabra era '{game['word']}'.")
+                del word_games[user_id]
+
+
+# --- SISTEMA DE INVITACIONES ---
+@bot.slash_command(guild_ids=[GUILD_ID], name="invitaciones", description="Muestra la cantidad de personas que has invitado al servidor.")
+async def show_invites(ctx: discord.ApplicationContext):
+    await ctx.defer(ephemeral=True)
+    inviter_id = ctx.user.id
+    invites_count = await asyncio.to_thread(db.get_invite_count, inviter_id)
+    await ctx.followup.send(f"Has invitado a **{invites_count}** personas al servidor. ¡Sigue así! 🚀", ephemeral=True)
+
+# --- COMANDOS DE ADMINISTRACIÓN ---
+admin_commands = bot.create_group("admin", "Comandos de administración", guild_ids=[GUILD_ID])
 @admin_commands.command(name="add_lbucks", description="Añade LBucks a un usuario.")
 @discord.default_permissions(administrator=True)
 async def add_lbucks(ctx: discord.ApplicationContext, usuario: discord.Member, cantidad: int):
     admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
-
     if admin_role is None or admin_role not in ctx.author.roles:
         return await ctx.respond("No tienes el rol de administrador para usar este comando.", ephemeral=True)
-
     await ctx.defer(ephemeral=True)
-
     await asyncio.to_thread(db.update_lbucks, usuario.id, cantidad)
     await ctx.followup.send(f"Se han añadido {cantidad} LBucks a {usuario.mention}.", ephemeral=True)
 
+
+# --- SERVIDOR WEB Y EJECUCIÓN ---
 app = Flask('')
 @app.route('/')
 def home():
@@ -464,4 +557,7 @@ def run_bot():
 if __name__ == "__main__":
     web_server_thread = Thread(target=run_web_server)
     web_server_thread.start()
+    # Esta línea se ejecuta en el thread principal del bot,
+    # por lo que no es necesario envolverla en bot.loop.create_task()
+    check_word_game_timeout() 
     run_bot()
