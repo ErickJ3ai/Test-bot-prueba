@@ -301,11 +301,12 @@ async def mission_message_tracker(message):
     await asyncio.to_thread(db.update_mission_progress, user_id, "message_count")
 
     # Lógica para el juego de adivinar la palabra
-    if user_id in word_games and message.channel.id == word_games[user_id]['channel_id']:
-        game = word_games[user_id]
-        if datetime.datetime.now() - game['start_time'] > datetime.timedelta(minutes=7) or game['rounds'] <= 0:
-            await message.channel.send(f"¡Se acabó el tiempo o las rondas para el juego de adivinar palabras de {message.author.mention}! La palabra era '{game['word']}'.")
-            del word_games[user_id]
+    if message.channel.id in word_games:
+        game = word_games[message.channel.id]
+        
+        if datetime.datetime.now() - game['start_time'] > datetime.timedelta(minutes=7):
+            await message.channel.send(f"¡Se acabó el tiempo o las rondas para el juego de adivinar palabras! La palabra era '{game['word']}'.")
+            del word_games[message.channel.id]
             return
         
         guess = message.content.lower()
@@ -323,7 +324,7 @@ async def mission_message_tracker(message):
                     reward = 20
                     await asyncio.to_thread(db.update_lbucks, user_id, reward)
                     await message.channel.send(f"¡Felicidades, {message.author.mention}! Adivinaste la palabra '{game['word']}' y has ganado **{reward} LBucks**. 🥳")
-                    del word_games[user_id]
+                    del word_games[message.channel.id]
                 else:
                     await message.channel.send(f"¡Bien hecho, {message.author.mention}! La palabra es: `{new_hint}`")
             else:
@@ -333,13 +334,13 @@ async def mission_message_tracker(message):
                     await message.channel.send(f"Te quedan {game['rounds']} rondas.")
                 else:
                     await message.channel.send(f"¡Se acabaron las rondas! La palabra era '{game['word']}'.")
-                    del word_games[user_id]
+                    del word_games[channel_id]
 
         elif guess == game['word']: # El usuario adivinó la palabra completa
             reward = 20
             await asyncio.to_thread(db.update_lbucks, user_id, reward)
-            await message.channel.send(f"¡{message.author.mention} ha adivinado la palabra '{game['word']}'! Has ganado **{reward} LBucks**. 🥳")
-            del word_games[user_id]
+            await message.channel.send(f"¡Felicidades, {message.author.mention}! Adivinaste la palabra '{game['word']}' y has ganado **{reward} LBucks**. 🥳")
+            del word_games[channel_id]
         else: # El usuario se equivocó
             await message.channel.send("¡Incorrecto! Intenta adivinar una letra o la palabra completa.")
             game['rounds'] -= 1
@@ -347,7 +348,257 @@ async def mission_message_tracker(message):
                 await message.channel.send(f"Te quedan {game['rounds']} rondas.")
             else:
                 await message.channel.send(f"¡Se acabaron las rondas! La palabra era '{game['word']}'.")
-                del word_games[user_id]
+                del word_games[channel_id]
+
+
+@bot.listen("on_raw_reaction_add")
+async def mission_reaction_tracker(payload):
+    if payload.member.bot:
+        return
+    await asyncio.to_thread(db.update_mission_progress, payload.member.id, "reaction_add")
+
+@bot.listen("on_application_command")
+async def mission_slash_command_tracker(ctx):
+    if ctx.author.bot:
+        return
+    await asyncio.to_thread(db.update_mission_progress, ctx.author.id, "slash_command_use")
+
+@bot.listen("on_voice_state_update")
+async def mission_voice_tracker(member, before, after):
+    if member.bot:
+        return
+    if before.channel is None and after.channel is not None:
+        await asyncio.to_thread(db.update_mission_progress, member.id, "voice_minutes", progress_increase=0)
+    if before.channel is not None and after.channel is None:
+        await asyncio.to_thread(db.update_mission_progress, member.id, "voice_minutes", progress_increase=1)
+
+
+# --- COMANDOS DE BARRA ---
+@bot.slash_command(guild_ids=[GUILD_ID], name="ayuda", description="Muestra el menú principal y la información del bot.")
+async def ayuda(ctx: discord.ApplicationContext):
+    await ctx.defer(ephemeral=True)
+    embed = discord.Embed(
+        title="📚 𝑮𝒖𝒊́𝒂 𝒅𝒆 𝒄𝒐𝒎𝒂�𝒅𝐨s",
+        description="Aquí tienes todos los comandos disponibles para participar en el evento.",
+        color=discord.Color.blue()
+    )
+    embed.set_thumbnail(url=ctx.guild.icon.url)
+    embed.add_field(name="☀️ `/login_diario`", value="Reclama 5 LBucks cada 24 horas. ¡Es la forma más fácil de ganar!", inline=False)
+    embed.add_field(name="🏪 `/canjear`", value="Abre el Centro de Canjeo para intercambiar tus LBucks por Robux y otros premios.", inline=False)
+    embed.add_field(name="💵 `/saldo`", value="Consulta tu saldo de LBucks en cualquier momento.", inline=False)
+    embed.add_field(name="🎁 `/donar`", value="Dona LBucks a otro usuario del servidor.", inline=False)
+    embed.add_field(name="📝 `/misiones`", value="Consulta tus misiones diarias y el progreso para ganar recompensas adicionales.", inline=False)
+    embed.add_field(name="🕹️ `/adivinar_numero`", value="Inicia un juego para adivinar un número aleatorio y ganar LBucks.", inline=False)
+    embed.add_field(name="📚 `/adivinar_palabra`", value="Inicia una partida para adivinar una palabra aleatoria.", inline=False)
+    embed.add_field(name="👤 `/invitaciones`", value="Revisa la cantidad de personas que has invitado y tu recompensa.", inline=False)
+    embed.add_field(
+        name="➕ Robux Pendientes",
+        value="""Para ver tus Robux pendientes de canje, ve a la página web de Roblox, haz clic en el ícono de Robux y luego en **"Mis transacciones"**. Los Robux pendientes estarán visibles en el apartado de **"Robux pendientes"** .""",
+        inline=False
+    )
+    embed.set_footer(text="¡Gracias por participar en nuestro evento! 🎉")
+    await ctx.followup.send(embed=embed, ephemeral=True)
+
+
+@bot.slash_command(guild_ids=[GUILD_ID], name="login_diario", description="Reclama tu recompensa diaria de 5 LBucks.")
+async def daily_command(ctx: discord.ApplicationContext):
+    await ctx.defer(ephemeral=True)
+    try:
+        user_id = ctx.user.id
+        user_data = await asyncio.to_thread(db.get_user, user_id)
+        if user_data is None:
+            await ctx.followup.send("Error al obtener tus datos. Intenta de nuevo.", ephemeral=True)
+            return
+        last_claim_time = user_data[2]
+        if isinstance(last_claim_time, str):
+            try:
+                last_claim_time = datetime.datetime.fromisoformat(last_claim_time).replace(tzinfo=datetime.timezone.utc)
+            except ValueError:
+                last_claim_time = None
+        if isinstance(last_claim_time, datetime.datetime) and (datetime.datetime.now(datetime.UTC) - last_claim_time < datetime.timedelta(hours=24)):
+            time_left = datetime.timedelta(hours=24) - (datetime.datetime.now(datetime.UTC) - last_claim_time)
+            hours, rem = divmod(int(time_left.total_seconds()), 3600)
+            minutes, _ = divmod(rem, 60)
+            await ctx.followup.send(f"Ya reclamaste tu recompensa. Vuelve en {hours}h {minutes}m.", ephemeral=True)
+            return
+        await asyncio.to_thread(db.update_lbucks, user_id, 5)
+        await asyncio.to_thread(db.update_daily_claim, user_id)
+        await ctx.followup.send("¡Has recibido 5 LBucks! 🪙", ephemeral=True)
+    except Exception as e:
+        print(f"🚨 Error inesperado en daily_command: {e}")
+        await ctx.followup.send("Ocurrió un error al procesar tu recompensa. Intenta de nuevo más tarde.", ephemeral=True)
+
+
+@bot.slash_command(guild_ids=[GUILD_ID], name="canjear", description="Abre el centro de canjeo para canjear LBucks por Robux.")
+async def canjear(ctx: discord.ApplicationContext):
+    await ctx.defer(ephemeral=True)
+    items = await asyncio.to_thread(db.get_shop_items) or []
+    await ctx.followup.send("Abriendo el Centro de Canjeo...", view=RedeemMenuView(items), ephemeral=True)
+
+
+@bot.slash_command(guild_ids=[GUILD_ID], name="saldo", description="Consulta tu saldo actual de LBucks.")
+async def saldo(ctx: discord.ApplicationContext):
+    await ctx.defer(ephemeral=True)
+    balance = await asyncio.to_thread(db.get_balance, ctx.user.id)
+    await ctx.followup.send(f"Tu saldo actual es: **{balance} LBucks** 🪙", view=UpdateBalanceView(), ephemeral=True)
+
+
+@bot.slash_command(guild_ids=[GUILD_ID], name="donar", description="Dona LBucks a otro usuario.")
+async def donar(ctx: discord.ApplicationContext):
+    modal = DonateModal()
+    await ctx.response.send_modal(modal)
+
+
+@bot.slash_command(guild_ids=[GUILD_ID], name="misiones", description="Muestra tus misiones diarias.")
+async def misiones(ctx: discord.ApplicationContext):
+    await ctx.defer(ephemeral=True)
+    missions = await asyncio.to_thread(db.get_daily_missions, ctx.user.id)
+    if not missions:
+        await ctx.followup.send("No hay misiones disponibles en este momento. Inténtalo más tarde.", ephemeral=True)
+        return
+    embed = discord.Embed(title="📝 Tus Misiones Diarias", description="Completa estas misiones para ganar LBucks.", color=discord.Color.blue())
+    for m in missions:
+        status_emoji = "✅" if m['is_completed'] else "⌛"
+        progress_text = f"({m['progress']}/{m['target_value']})" if not m['is_completed'] else ""
+        embed.add_field(name=f"{status_emoji} {m['description']}", value=f"Recompensa: **{m['reward']} LBucks** {progress_text}", inline=False)
+    await ctx.followup.send(embed=embed, view=UpdateMissionsView(), ephemeral=True)
+
+
+@bot.slash_command(guild_ids=[GUILD_ID], name="adivinar_numero", description="Inicia un juego para adivinar un número aleatorio y gana LBucks.")
+async def guess_number_game(ctx: discord.ApplicationContext, guess: int=None):
+    await ctx.defer(ephemeral=False)
+    user_id = ctx.user.id
+    channel_id = ctx.channel.id
+    
+    if guess is None:
+        if channel_id in number_games:
+            await ctx.followup.send(f"¡Ya hay un juego en curso en este canal! Adivina con el mismo comando.", ephemeral=False)
+            return
+        
+        number_games[channel_id] = {
+            'number': random.randint(1, 100), 
+            'guesses': {}, 
+            'start_time': datetime.datetime.now(),
+            'started_by': user_id
+        }
+        
+        admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
+        if admin_role and admin_role in ctx.user.roles:
+            pista = f"He pensado en un número entre 1 y 100. El número es **{number_games[channel_id]['number']}**. Tienes 1 minuto para adivinarlo."
+        else:
+            pista_par_impar = "par" if number_games[channel_id]['number'] % 2 == 0 else "impar"
+            pista = f"¡He pensado en un número entre 1 y 100! Tienes 1 minuto para adivinarlo. La pista: Es un número **{pista_par_impar}**. 😉"
+        await ctx.followup.send(pista, ephemeral=False)
+        return
+
+    # Lógica de adivinanza
+    if channel_id not in number_games:
+        await ctx.followup.send("No hay un juego en curso en este canal. Usa `/adivinar_numero` para empezar uno.", ephemeral=True)
+        return
+        
+    game = number_games[channel_id]
+    
+    if datetime.datetime.now() - game['start_time'] > datetime.timedelta(minutes=1):
+        admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
+        final_message = f"¡Se acabó el tiempo! "
+        if admin_role and admin_role in ctx.user.roles:
+            final_message += f"El número era {game['number']}."
+        final_message += f" Intenta de nuevo con `/adivinar_numero`."
+        await ctx.followup.send(final_message, ephemeral=False)
+        del number_games[channel_id]
+        return
+    
+    game['guesses'][user_id] = game['guesses'].get(user_id, 0) + 1
+    
+    if guess == game['number']:
+        reward = 8
+        await asyncio.to_thread(db.update_lbucks, user_id, reward)
+        await ctx.followup.send(f"¡Felicidades, {ctx.user.mention}! Adivinaste el número {game['number']} en {game['guesses'][user_id]} intentos. Has ganado **{reward} LBucks**. 🥳", ephemeral=False)
+        del number_games[channel_id]
+    elif guess < game['number']:
+        await ctx.followup.send(f"Mi número es mayor. Inténtalo de nuevo.", ephemeral=False)
+    else:
+        await ctx.followup.send(f"Mi número es menor. Inténtalo de nuevo.", ephemeral=False)
+
+
+@bot.slash_command(guild_ids=[GUILD_ID], name="adivinar_palabra", description="Inicia una partida para adivinar una palabra oculta.")
+async def guess_word_game(ctx: discord.ApplicationContext):
+    await ctx.defer(ephemeral=False)
+    channel_id = ctx.channel.id
+    if channel_id in word_games:
+        await ctx.followup.send("¡Ya hay una partida en curso en este canal! Intenta adivinar la palabra.", ephemeral=False)
+        return
+    word_to_guess = await get_random_word_from_api()
+    if not word_to_guess:
+        await ctx.followup.send("No se pudo obtener una palabra. Inténtalo de nuevo más tarde.", ephemeral=False)
+        return
+
+    word_games[channel_id] = {
+        'word': word_to_guess,
+        'guessed_letters': set(),
+        'start_time': datetime.datetime.now(),
+        'rounds': 10,
+        'started_by': ctx.user.id
+    }
+    hint = "".join([c if c in word_games[channel_id]['guessed_letters'] else "_" for c in word_to_guess])
+    await ctx.followup.send(f"¡Partida iniciada por {ctx.user.mention}! Tienen 7 minutos y 10 rondas para adivinar la palabra. Pista: `{hint}`", ephemeral=False)
+
+
+@bot.listen("on_message")
+async def guess_word_listener(message):
+    if message.author.bot:
+        return
+    channel_id = message.channel.id
+    if channel_id in word_games:
+        game = word_games[channel_id]
+        user_id = message.author.id
+
+        if datetime.datetime.now() - game['start_time'] > datetime.timedelta(minutes=7):
+            await message.channel.send(f"¡Se acabó el tiempo o las rondas para el juego de adivinar palabras! La palabra era '{game['word']}'.")
+            del word_games[channel_id]
+            return
+        
+        guess = message.content.lower()
+
+        if len(guess) == 1 and guess.isalpha(): # El usuario adivinó una letra
+            if guess in game['guessed_letters']:
+                await message.channel.send("¡Ya adivinaste esa letra! Intenta con otra.")
+                return
+            
+            game['guessed_letters'].add(guess)
+            new_hint = "".join([c if c in game['guessed_letters'] else "_" for c in game['word']])
+            
+            if guess in game['word']:
+                if "_" not in new_hint:
+                    reward = 20
+                    await asyncio.to_thread(db.update_lbucks, user_id, reward)
+                    await message.channel.send(f"¡Felicidades, {message.author.mention}! Adivinaste la palabra '{game['word']}' y has ganado **{reward} LBucks**. 🥳")
+                    del word_games[channel_id]
+                else:
+                    await message.channel.send(f"¡Bien hecho, {message.author.mention}! La palabra es: `{new_hint}`")
+            else:
+                await message.channel.send(f"¡Incorrecto, {message.author.mention}! La letra '{guess}' no está en la palabra. La palabra es: `{new_hint}`")
+                game['rounds'] -= 1
+                if game['rounds'] > 0:
+                    await message.channel.send(f"Te quedan {game['rounds']} rondas.")
+                else:
+                    await message.channel.send(f"¡Se acabaron las rondas! La palabra era '{game['word']}'.")
+                    del word_games[channel_id]
+
+        elif guess == game['word']: # El usuario adivinó la palabra completa
+            reward = 20
+            await asyncio.to_thread(db.update_lbucks, user_id, reward)
+            await message.channel.send(f"¡Felicidades, {message.author.mention}! Adivinaste la palabra '{game['word']}' y has ganado **{reward} LBucks**. 🥳")
+            del word_games[channel_id]
+        else: # El usuario se equivocó
+            await message.channel.send("¡Incorrecto! Intenta adivinar una letra o la palabra completa.")
+            game['rounds'] -= 1
+            if game['rounds'] > 0:
+                await message.channel.send(f"Te quedan {game['rounds']} rondas.")
+            else:
+                await message.channel.send(f"¡Se acabaron las rondas! La palabra era '{game['word']}'.")
+                del word_games[channel_id]
+
 
 @bot.listen("on_raw_reaction_add")
 async def mission_reaction_tracker(payload):
@@ -470,13 +721,14 @@ async def guess_number_game(ctx: discord.ApplicationContext, guess: int=None):
     
     if guess is None:
         if channel_id in number_games:
-            await ctx.followup.send(f"¡Ya hay un juego en curso en este canal! Adivina un número con el mismo comando.", ephemeral=False)
+            await ctx.followup.send(f"¡Ya hay un juego en curso en este canal! Adivina con el mismo comando.", ephemeral=False)
             return
         
         number_games[channel_id] = {
             'number': random.randint(1, 100), 
-            'guesses': {}, # Guardamos los intentos por usuario
-            'start_time': datetime.datetime.now()
+            'guesses': {}, 
+            'start_time': datetime.datetime.now(),
+            'started_by': user_id
         }
         
         admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
@@ -489,8 +741,8 @@ async def guess_number_game(ctx: discord.ApplicationContext, guess: int=None):
         return
 
     # Lógica de adivinanza
-    if channel_id not in number_games or ctx.channel.id != number_games[channel_id]['channel_id']:
-        await ctx.followup.send("No tienes un juego en curso en este canal. Usa `/adivinar_numero` para empezar uno.", ephemeral=True)
+    if channel_id not in number_games:
+        await ctx.followup.send("No hay un juego en curso en este canal. Usa `/adivinar_numero` para empezar uno.", ephemeral=True)
         return
         
     game = number_games[channel_id]
@@ -524,7 +776,7 @@ async def guess_word_game(ctx: discord.ApplicationContext):
     await ctx.defer(ephemeral=False)
     channel_id = ctx.channel.id
     if channel_id in word_games:
-        await ctx.followup.send("¡Ya tienes una partida en curso! Intenta adivinar la palabra.", ephemeral=False)
+        await ctx.followup.send("¡Ya hay una partida en curso en este canal! Intenta adivinar la palabra.", ephemeral=False)
         return
     word_to_guess = await get_random_word_from_api()
     if not word_to_guess:
@@ -538,7 +790,7 @@ async def guess_word_game(ctx: discord.ApplicationContext):
         'rounds': 10,
         'started_by': ctx.user.id
     }
-    hint = "".join(["_" if c in word_games[channel_id]['guessed_letters'] else "_" for c in word_to_guess])
+    hint = "".join([c if c in word_games[channel_id]['guessed_letters'] else "_" for c in word_to_guess])
     await ctx.followup.send(f"¡Partida iniciada por {ctx.user.mention}! Tienen 7 minutos y 10 rondas para adivinar la palabra. Pista: `{hint}`", ephemeral=False)
 
 
@@ -586,7 +838,7 @@ async def guess_word_listener(message):
         elif guess == game['word']: # El usuario adivinó la palabra completa
             reward = 20
             await asyncio.to_thread(db.update_lbucks, user_id, reward)
-            await message.channel.send(f"¡{message.author.mention} ha adivinado la palabra '{game['word']}'! Has ganado **{reward} LBucks**. 🥳")
+            await message.channel.send(f"¡Felicidades, {message.author.mention}! Adivinaste la palabra '{game['word']}' y has ganado **{reward} LBucks**. 🥳")
             del word_games[channel_id]
         else: # El usuario se equivocó
             await message.channel.send("¡Incorrecto! Intenta adivinar una letra o la palabra completa.")
