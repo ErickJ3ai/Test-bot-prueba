@@ -324,7 +324,7 @@ async def mission_message_tracker(message):
                     reward = 20
                     await asyncio.to_thread(db.update_lbucks, user_id, reward)
                     await message.channel.send(f"¡Felicidades, {message.author.mention}! Adivinaste la palabra '{game['word']}' y has ganado **{reward} LBucks**. 🥳")
-                    del word_games[message.channel.id]
+                    del word_games[channel_id]
                 else:
                     await message.channel.send(f"¡Bien hecho, {message.author.mention}! La palabra es: `{new_hint}`")
             else:
@@ -334,7 +334,7 @@ async def mission_message_tracker(message):
                     await message.channel.send(f"Te quedan {game['rounds']} rondas.")
                 else:
                     await message.channel.send(f"¡Se acabaron las rondas! La palabra era '{game['word']}'.")
-                    del word_games[message.channel.id]
+                    del word_games[channel_id]
 
         elif guess == game['word']: # El usuario adivinó la palabra completa
             reward = 20
@@ -464,7 +464,7 @@ async def misiones(ctx: discord.ApplicationContext):
     await ctx.followup.send(embed=embed, view=UpdateMissionsView(), ephemeral=True)
 
 
-@bot.slash_command(guild_ids=[GUILD_ID], name="adivinar_numero", description="Inicia o adivina un número aleatorio entre 1 y 100.")
+@bot.slash_command(guild_ids=[GUILD_ID], name="adivinar_numero", description="Inicia un juego para adivinar un número aleatorio y gana LBucks.")
 async def guess_number_game(ctx: discord.ApplicationContext, guess: int=None):
     await ctx.defer(ephemeral=False)
     user_id = ctx.user.id
@@ -472,7 +472,7 @@ async def guess_number_game(ctx: discord.ApplicationContext, guess: int=None):
     
     if guess is None:
         if channel_id in number_games:
-            await ctx.followup.send(f"¡Ya hay un juego en curso en este canal! Adivina con el mismo comando.", ephemeral=False)
+            await ctx.followup.send("¡Ya hay un juego en curso en este canal! Adivina con el mismo comando.", ephemeral=False)
             return
         
         number_games[channel_id] = {
@@ -499,14 +499,7 @@ async def guess_number_game(ctx: discord.ApplicationContext, guess: int=None):
     game = number_games[channel_id]
     
     if datetime.datetime.now() - game['start_time'] > datetime.timedelta(minutes=1):
-        admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
-        final_message = f"¡Se acabó el tiempo! "
-        if admin_role and admin_role in ctx.user.roles:
-            final_message += f"El número era {game['number']}."
-        else:
-            final_message += f"El número era {game['number']}." # Mensaje de fin de juego para todos
-        final_message += f" Intenta de nuevo con `/adivinar_numero`."
-        await ctx.followup.send(final_message, ephemeral=False)
+        await ctx.followup.send(f"¡Se acabó el tiempo! El número era {game['number']}. Intenta de nuevo con `/adivinar_numero`.", ephemeral=False)
         del number_games[channel_id]
         return
     
@@ -550,7 +543,7 @@ async def guess_word_listener(message):
         user_id = message.author.id
 
         if datetime.datetime.now() - game['start_time'] > datetime.timedelta(minutes=7):
-            await message.channel.send(f"¡Se acabó el tiempo o las rondas para el juego de adivinar palabras! La palabra era '{game['word']}'.")
+            await message.channel.send(f"¡Se acabó el tiempo o las rondas para el juego de adivinar palabras de {message.author.mention}! La palabra era '{game['word']}'.")
             del word_games[channel_id]
             return
         
