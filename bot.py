@@ -557,7 +557,5 @@ def run_bot():
 if __name__ == "__main__":
     web_server_thread = Thread(target=run_web_server)
     web_server_thread.start()
-    # Esta línea se ejecuta en el thread principal del bot,
-    # por lo que no es necesario envolverla en bot.loop.create_task()
-    check_word_game_timeout() 
+    bot.loop.create_task(check_word_game_timeout())
     run_bot()
