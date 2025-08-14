@@ -402,6 +402,30 @@ async def on_member_join(member):
     finally:
         invites_cache[member.guild.id] = await member.guild.invites()
 
+# --- COMANDOS ORIGINALES ---
+@bot.slash_command(name="balance", description="Muestra tu saldo de LBucks")
+async def balance(ctx):
+    bal = await asyncio.to_thread(db.get_balance, ctx.author.id)
+    await ctx.respond(f"Tu saldo actual es: **{bal} LBucks** 🪙")
+
+@bot.slash_command(name="donar", description="Donar LBucks a otro usuario")
+async def donar(ctx):
+    modal = DonateModal()
+    await ctx.send_modal(modal)
+
+@bot.slash_command(name="misiones", description="Muestra tus misiones diarias")
+async def misiones(ctx):
+    missions = await asyncio.to_thread(db.get_daily_missions, ctx.author.id)
+    if not missions:
+        await ctx.respond("No hay misiones disponibles.", ephemeral=True)
+        return
+    embed = discord.Embed(title="📝 Tus Misiones Diarias", description="Completa estas misiones para ganar LBucks.", color=discord.Color.blue())
+    for m in missions:
+        status_emoji = "✅" if m['is_completed'] else "⌛"
+        progress_text = f"({m['progress']}/{m['target_value']})" if not m['is_completed'] else ""
+        embed.add_field(name=f"{status_emoji} {m['description']}", value=f"Recompensa: **{m['reward']} LBucks** {progress_text}", inline=False)
+    await ctx.respond(embed=embed, ephemeral=True)
+    
 # --- MINIJUEGO DE ADIVINAR PALABRAS CON AHORCADO Y 12 INTENTOS ---
 @bot.listen("on_message")
 async def mission_message_tracker(message):
