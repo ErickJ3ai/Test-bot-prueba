@@ -471,8 +471,8 @@ def home():
     return "El bot está vivo."
 
 def run_web_server():
-    serve(app, host="0.0.0.0", port=8080)  # Cambia el puerto si es necesario
-
+    port = int(os.environ.get("PORT", 8080))  # Por defecto usa 8080 si no hay variable
+    serve(app, host="0.0.0.0", port=port)
 def run_bot():
     bot.run(TOKEN)
 
