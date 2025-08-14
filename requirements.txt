@@ -4,3 +4,5 @@ Flask
 waitress
 supabase
 aiohttp
+unidecode
+
