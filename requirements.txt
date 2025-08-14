@@ -4,4 +4,3 @@ Flask
 waitress
 supabase
 aiohttp
-discord-py
