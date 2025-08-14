@@ -1,4 +1,224 @@
-# --- RECOMPENSAS, ADMIN, ACTUALIZACIÓN DE SALDO Y MISIONES ---
+import discord
+from discord import Object
+from discord.ext import commands
+from discord.ui import Button, View
+import os
+from dotenv import load_dotenv
+import datetime
+from flask import Flask
+from threading import Thread
+from waitress import serve
+import database as db
+from config import GUILD_ID, ADMIN_ROLE_NAME, REDEMPTION_LOG_CHANNEL_ID
+import asyncio
+import random
+import aiohttp
+import unidecode
+
+# --- CONFIGURACIÓN E INICIALIZACIÓN ---
+load_dotenv()
+TOKEN = os.environ['DISCORD_TOKEN']
+intents = discord.Intents.default()
+intents.members = True
+intents.message_content = True
+bot = discord.Bot(intents=intents)
+
+# --- JUEGOS Y GESTIÓN DE ESTADO ---
+number_games = {}
+word_games = {}
+
+# --- DISEÑOS DEL AHORCADO (12 etapas) ---
+HANGMAN_STAGES = [
+    """
+      +---+
+      |   |
+          |
+          |
+          |
+          |
+    =========
+    """,
+    """
+      +---+
+      |   |
+      O   |
+          |
+          |
+          |
+    =========
+    """,
+    """
+      +---+
+      |   |
+      O   |
+      |   |
+          |
+          |
+    =========
+    """,
+    """
+      +---+
+      |   |
+      O   |
+     /|   |
+          |
+          |
+    =========
+    """,
+    """
+      +---+
+      |   |
+      O   |
+     /|\\  |
+          |
+          |
+    =========
+    """,
+    """
+      +---+
+      |   |
+      O   |
+     /|\\  |
+     /    |
+          |
+    =========
+    """,
+    """
+      +---+
+      |   |
+      O   |
+     /|\\  |
+     / \\  |
+          |
+    =========
+    """,
+    """
+      +---+
+      |   |
+     [O   |
+     /|\\  |
+     / \\  |
+          |
+    =========
+    """,
+    """
+      +---+
+      |   |
+     [O]  |
+     /|\\  |
+     / \\  |
+          |
+    =========
+    """,
+    """
+      +---+
+      |   |
+     [O]  |
+     /|\\  |
+     / \\  |
+    RIP   |
+    =========
+    """,
+    """
+      +---+
+      |   |
+     [O]  |
+     /|\\  |
+     / \\  |
+    DEAD  |
+    =========
+    """,
+    """
+      +---+
+      |   |
+     [X]  |
+     /|\\  |
+     / \\  |
+    GAME OVER |
+    =========
+    """
+]
+
+# --- FUNCIONES AUXILIARES ---
+async def get_random_word_from_api():
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://clientes.api.ilernus.com/randomWord/1") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data[0]['word'].lower()
+                else:
+                    return None
+    except Exception as e:
+        print(f"Error al obtener palabra de la API: {e}")
+        return None
+
+async def check_word_game_timeout():
+    while True:
+        await asyncio.sleep(60)
+        to_delete = []
+        for channel_id, game in word_games.items():
+            if datetime.datetime.now() - game['start_time'] > datetime.timedelta(minutes=7):
+                channel = bot.get_channel(channel_id)
+                if channel:
+                    await channel.send(f"¡Se acabó el tiempo para el juego de adivinar palabras! La palabra era '{game['word']}'.")
+                to_delete.append(channel_id)
+        for channel_id in to_delete:
+            del word_games[channel_id]
+
+# --- VISTAS DE BOTONES (UI) ---
+class DonateModal(discord.ui.Modal):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs, title="Donar LBucks")
+        self.amount_input = discord.ui.InputText(
+            label="Cantidad de LBucks",
+            placeholder="Introduce la cantidad a donar",
+            min_length=1,
+            max_length=10,
+            style=discord.InputTextStyle.short
+        )
+        self.recipient_input = discord.ui.InputText(
+            label="Destinatario (ID o nombre de usuario)",
+            placeholder="Introduce el ID o nombre de usuario de la persona",
+            min_length=1,
+            max_length=32,
+            style=discord.InputTextStyle.short
+        )
+        self.add_item(self.amount_input)
+        self.add_item(self.recipient_input)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            amount = int(self.amount_input.value)
+            recipient_str = self.recipient_input.value
+            if recipient_str.isdigit():
+                recipient = await bot.fetch_user(int(recipient_str))
+            else:
+                recipient = discord.utils.get(interaction.guild.members, name=recipient_str)
+            if recipient is None:
+                await interaction.followup.send("No se pudo encontrar al destinatario.", ephemeral=True)
+                return
+            if amount <= 0:
+                await interaction.followup.send("La cantidad a donar debe ser un número positivo.", ephemeral=True)
+                return
+            if interaction.user.id == recipient.id:
+                await interaction.followup.send("No puedes donarte LBucks a ti mismo.", ephemeral=True)
+                return
+            doner_balance = await asyncio.to_thread(db.get_balance, interaction.user.id)
+            if doner_balance < amount:
+                await interaction.followup.send("No tienes suficientes LBucks para donar.", ephemeral=True)
+                return
+            await asyncio.to_thread(db.update_lbucks, interaction.user.id, -amount)
+            await asyncio.to_thread(db.update_lbucks, recipient.id, amount)
+            await interaction.followup.send(f"Has donado **{amount} LBucks** a **{recipient.name}**. ¡Gracias por tu generosidad! 🎉", ephemeral=True)
+        except ValueError:
+            await interaction.followup.send("La cantidad debe ser un número válido.", ephemeral=True)
+        except Exception as e:
+            print(f"Error en el modal de donación: {e}")
+            await interaction.followup.send("Ocurrió un error al procesar tu donación. Intenta de nuevo más tarde.", ephemeral=True)
+
+# --- AQUÍ VAN TODAS TUS CLASES ORIGINALES ---
 class RedeemMenuView(View):
     def __init__(self, items):
         super().__init__(timeout=300)
@@ -131,3 +351,133 @@ class UpdateMissionsView(View):
             progress_text = f"({m['progress']}/{m['target_value']})" if not m['is_completed'] else ""
             embed.add_field(name=f"{status_emoji} {m['description']}", value=f"Recompensa: **{m['reward']} LBucks** {progress_text}", inline=False)
         await interaction.response.edit_message(embed=embed, view=self)
+
+# --- RECOMPENSAS POR INVITACIÓN ---
+invites_cache = {}
+@bot.event
+async def on_ready():
+    print(f"✅ BOT '{bot.user}' CONECTADO Y LISTO")
+    try:
+        await asyncio.to_thread(db.init_db)
+        print("✔️ Base de datos inicializada.")
+    except Exception as e:
+        print(f"⚠️ Error al inicializar la base de datos: {e}")
+    try:
+        if not hasattr(bot, "persistent_views_added"):
+            bot.add_view(AdminActionView())
+            bot.add_view(UpdateBalanceView())
+            bot.add_view(UpdateMissionsView())
+            bot.persistent_views_added = True
+            print("👁️ Vistas persistentes registradas.")
+    except Exception as e:
+        print(f"⚠️ Error al registrar vistas persistentes: {e}")
+
+    print("Caché de invitaciones...")
+    for guild in bot.guilds:
+        try:
+            invites_cache[guild.id] = await guild.invites()
+        except discord.Forbidden:
+            print(f"Error: Permisos faltantes para leer invitaciones en el servidor {guild.name}")
+    bot.loop.create_task(check_word_game_timeout())
+
+@bot.event
+async def on_member_join(member):
+    await asyncio.sleep(5)
+    try:
+        new_invites = await member.guild.invites()
+        old_invites = invites_cache.get(member.guild.id, [])
+        used_invite = None
+        for new_invite in new_invites:
+            for old_invite in old_invites:
+                if new_invite.code == old_invite.code and new_invite.uses > old_invite.uses:
+                    used_invite = new_invite
+                    break
+            if used_invite:
+                break
+        if used_invite and used_invite.inviter:
+            inviter = used_invite.inviter
+            await asyncio.to_thread(db.check_and_update_invite_reward, used_invite.code, inviter.id)
+    except Exception as e:
+        print(f"Error en on_member_join: {e}")
+    finally:
+        invites_cache[member.guild.id] = await member.guild.invites()
+
+# --- MINIJUEGO DE ADIVINAR PALABRAS CON AHORCADO Y 12 INTENTOS ---
+@bot.listen("on_message")
+async def mission_message_tracker(message):
+    user_id = message.author.id
+    if message.author.bot:
+        return
+    await asyncio.to_thread(db.update_mission_progress, user_id, "message_count")
+
+    if message.channel.id in word_games:
+        game = word_games[message.channel.id]
+
+        if datetime.datetime.now() - game['start_time'] > datetime.timedelta(minutes=7):
+            await message.channel.send(f"¡Se acabó el tiempo o las rondas para el juego de adivinar palabras! La palabra era '{game['word']}'.")
+            del word_games[message.channel.id]
+            return
+
+        guess = unidecode.unidecode(message.content.lower())
+
+        if len(guess) == 1 and guess.isalpha():
+            if guess in game['guessed_letters']:
+                await message.channel.send(f"¡Ya adivinaste esa letra! Intenta con otra.")
+                return
+            game['guessed_letters'].add(guess)
+            new_hint = "".join([unidecode.unidecode(c) if unidecode.unidecode(c) in game['guessed_letters'] else "_" for c in game['word']])
+
+            if guess in unidecode.unidecode(game['word']):
+                if "_" not in new_hint:
+                    reward = 20
+                    await asyncio.to_thread(db.update_lbucks, user_id, reward)
+                    await message.channel.send(f"¡Felicidades, {message.author.mention}! Adivinaste la palabra '{game['word']}' y has ganado **{reward} LBucks**. 🥳")
+                    del word_games[message.channel.id]
+                else:
+                    await message.channel.send(f"¡Bien hecho, {message.author.mention}! La palabra es: `{new_hint}`")
+            else:
+                game['rounds'] -= 1
+                stage_index = 12 - game['rounds'] - 1
+                if stage_index >= len(HANGMAN_STAGES):
+                    stage_index = len(HANGMAN_STAGES) - 1
+                await message.channel.send(f"¡Incorrecto, {message.author.mention}! La letra '{guess}' no está en la palabra.\n```{HANGMAN_STAGES[stage_index]}```\nLa palabra es: `{new_hint}`")
+                if game['rounds'] > 0:
+                    await message.channel.send(f"Te quedan {game['rounds']} rondas.")
+                else:
+                    await message.channel.send(f"¡Se acabaron las rondas! La palabra era '{game['word']}'.")
+                    del word_games[message.channel.id]
+
+        elif guess == unidecode.unidecode(game['word']):
+            reward = 20
+            await asyncio.to_thread(db.update_lbucks, user_id, reward)
+            await message.channel.send(f"¡Felicidades, {message.author.mention}! Adivinaste la palabra '{game['word']}' y has ganado **{reward} LBucks**. 🥳")
+            del word_games[message.channel.id]
+        else:
+            game['rounds'] -= 1
+            stage_index = 12 - game['rounds'] - 1
+            if stage_index >= len(HANGMAN_STAGES):
+                stage_index = len(HANGMAN_STAGES) - 1
+            await message.channel.send(f"¡Incorrecto! Intenta adivinar una letra o la palabra completa.\n```{HANGMAN_STAGES[stage_index]}```")
+            if game['rounds'] > 0:
+                await message.channel.send(f"Te quedan {game['rounds']} rondas.")
+            else:
+                await message.channel.send(f"¡Se acabaron las rondas! La palabra era '{game['word']}'.")
+                del word_games[message.channel.id]
+
+# --- SERVIDOR WEB Y EJECUCIÓN ---
+app = Flask('')
+@app.route('/')
+def home():
+    return "El bot está vivo."
+
+def run_web_server():
+    serve(app, host="0.0.0.0", port=8080)  # Cambia el puerto si es necesario
+
+def run_bot():
+    bot.run(TOKEN)
+
+if __name__ == "__main__":
+    web_server_thread = Thread(target=run_web_server)
+    web_server_thread.start()
+    bot.loop.create_task(check_word_game_timeout())
+    run_bot()
