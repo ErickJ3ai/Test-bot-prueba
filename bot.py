@@ -616,7 +616,9 @@ def home():
     return "El bot está vivo y funcionando."
 
 def run_web_server():
-    serve(app, host="0.0.0.0", port=8080)
+    # Obtiene el puerto de la variable de entorno PORT, o usa 8080 si no existe.
+    port = int(os.environ.get('PORT', 8080))
+    serve(app, host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
     web_server_thread = Thread(target=run_web_server)
