@@ -486,8 +486,8 @@ async def ayuda(ctx: discord.ApplicationContext):
 # ... (Aquí van los comandos /login_diario, /canjear, /saldo, /donar, /misiones, /invitaciones que no cambiaron)
 @bot.slash_command(
     guild_ids=[GUILD_ID],
-    name="login_diario 💷",
-    description="Reclama tu recompensa diaria."
+    name="login_diario",
+    description="Reclama tu recompensa diaria 💷"
 )
 async def daily_command(ctx: discord.ApplicationContext):
     await ctx.defer(ephemeral=True)
