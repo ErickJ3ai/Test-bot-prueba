@@ -14,7 +14,7 @@ from config import GUILD_ID, ADMIN_ROLE_NAME, REDEMPTION_LOG_CHANNEL_ID
 import asyncio
 import random
 import aiohttp
-from unidecode import unidecode # <-- Asegúrate de tener esto en requirements.txt
+from unidecode import unidecode
 
 # --- 1. CONFIGURACIÓN E INICIALIZACIÓN ---
 load_dotenv()
@@ -28,19 +28,58 @@ bot = discord.Bot(intents=intents)
 number_games = {}
 word_games = {}
 
-# Lista de palabras local para que el juego sea 100% confiable y rápido
+# Puedes agregar todas las palabras que quieras a esta lista
 PALABRAS_LOCALES = [
     "computadora", "biblioteca", "desarrollo", "guitarra", "universo",
     "aventura", "botella", "estrella", "planeta", "galaxia", "elefante",
     "jirafa", "cocodrilo", "murcielago", "mariposa", "teclado", "montaña",
-    "programacion", "inteligencia", "artificial", "videojuego"
+    "programacion", "inteligencia", "artificial", "videojuego", "discord", 
+    "pensamiento", "encuadernado", "psiquiatra", "psicologia", "carpinteria", 
+    "humanidad", "emprendimiento", "terrateniente", "nucleares", "agnostico", 
+    "pronostico", "aleatorio", "termodinamica", "prioridad", "sistematico", 
+    "veracidad", "parlamento", "oratoria", "permutaciones", "formalidad", 
+    "otorrinolaringologo", "esternocleidomastoideo", "Ovoviparo", "anacronismo", 
+    "calamidad", "cardiologo", "Indomito", "frecuente", "Principalmente", "Contrarrevolucionario", 
+    "Cientificismo", "Paralelepipedo", "Transustanciacion"
+]
+
+HANGMAN_PICS = [
+    '```\n +---+\n |   |\n     |\n     |\n     |\n     |\n=========\n```',
+    '```\n +---+\n |   |\n O   |\n     |\n     |\n     |\n=========\n```',
+    '```\n +---+\n |   |\n O   |\n |   |\n     |\n     |\n=========\n```',
+    '```\n +---+\n |   |\n O   |\n/|   |\n     |\n     |\n=========\n```',
+    '```\n +---+\n |   |\n O   |\n/|\\  |\n     |\n     |\n=========\n```',
+    '```\n +---+\n |   |\n O   |\n/|\\  |\n/    |\n     |\n=========\n```',
+    '```\n +---+\n |   |\n O   |\n/|\\  |\n/ \\  |\n     |\n=========\n```'
 ]
 
 async def get_random_word_local():
-    """Obtiene una palabra de la lista local para máxima fiabilidad."""
     palabra = random.choice(PALABRAS_LOCALES)
     return unidecode(palabra.lower())
 
+def create_hangman_embed(game_state, game_over_status=None):
+    word = game_state['word']
+    hint = " ".join([c if c in game_state['guessed_letters'] else "＿" for c in word])
+    embed = discord.Embed(color=discord.Color.blue())
+    
+    if game_over_status == "win":
+        embed.title = "🎉 ¡Felicidades, has ganado! 🎉"
+        embed.description = f"La palabra era: **{word.capitalize()}**"
+        embed.color = discord.Color.green()
+    elif game_over_status == "loss":
+        embed.title = "☠️ ¡Oh no, has perdido! ☠️"
+        embed.description = f"La palabra era: **{word.capitalize()}**"
+        embed.color = discord.Color.red()
+    else:
+        embed.title = "🤔 Juego del Ahorcado 🤔"
+        embed.description = "Adivina la palabra enviando una letra en este canal."
+        
+    embed.add_field(name="Palabra", value=f"`{hint}`", inline=False)
+    mistakes = game_state['mistakes']
+    embed.add_field(name="Progreso", value=HANGMAN_PICS[mistakes], inline=True)
+    wrong_letters = ", ".join(sorted(list(game_state['wrong_guesses']))) or "Ninguna"
+    embed.add_field(name="Letras Incorrectas", value=wrong_letters, inline=True)
+    return embed
 
 async def check_word_game_timeout():
     while True:
@@ -51,17 +90,13 @@ async def check_word_game_timeout():
             if now - game['start_time'] > datetime.timedelta(minutes=7):
                 channel = bot.get_channel(channel_id)
                 if channel:
-                    await channel.send(
-                        f"¡Se acabó el tiempo para el juego de adivinar palabras! La palabra era '{game['word']}'."
-                    )
+                    await channel.send(f"¡Se acabó el tiempo para el juego de adivinar palabras! La palabra era '{game['word']}'.")
                 to_delete.append(channel_id)
         for channel_id in to_delete:
             if channel_id in word_games:
                 del word_games[channel_id]
 
-
 # --- 3. VISTAS DE BOTONES (UI) ---
-# (Esta sección no necesita cambios, se mantiene como la tenías)
 class DonateModal(discord.ui.Modal):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs, title="Donar LBucks")
@@ -203,6 +238,7 @@ class ConfirmCancelView(View):
         await interaction.response.edit_message(
             content="Tu canjeo ha sido cancelado.", view=None)
 
+
 class AdminActionView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -292,6 +328,7 @@ class UpdateBalanceView(View):
         await interaction.followup.send(
             f"Tu saldo actualizado es: **{balance} LBucks** 🪙", ephemeral=True)
 
+
 class UpdateMissionsView(View):
     def __init__(self):
         super().__init__(timeout=None) # <-- Vista Persistente
@@ -319,7 +356,6 @@ class UpdateMissionsView(View):
                     value=f"Recompensa: **{m['reward']} LBucks** {progress_text}",
                     inline=False)
         await interaction.followup.send(embed=embed, view=self, ephemeral=True)
-
 
 # --- 4. EVENTOS Y LISTENERS ---
 invites_cache = {}
@@ -381,59 +417,73 @@ async def on_message_handler(message):
     if message.author.bot:
         return
 
-    # Listener para misiones de mensajes
     await asyncio.to_thread(db.update_mission_progress, message.author.id, "message_count")
 
-    # Listener para el juego de adivinar la palabra
     channel_id = message.channel.id
     if channel_id in word_games:
         game = word_games[channel_id]
         guess = unidecode(message.content.lower())
+        
+        try:
+            await message.delete()
+        except discord.Forbidden:
+            pass
 
-        if guess == game['word']:
-            reward = 20
-            await asyncio.to_thread(db.update_lbucks, message.author.id, reward)
-            await message.channel.send(f"¡Felicidades, {message.author.mention}! Adivinaste la palabra **'{game['word']}'** y ganaste **{reward} LBucks**. 🥳")
-            del word_games[channel_id]
-        elif len(guess) == 1 and guess.isalpha():
-            if guess in game['guessed_letters']:
-                return # Ignorar letras ya dichas para no spamear el chat
+        if not (len(guess) == 1 and guess.isalpha()):
+            return
 
+        if guess in game['guessed_letters'] or guess in game['wrong_guesses']:
+            return
+
+        game_message = await message.channel.fetch_message(game['message_id'])
+
+        if guess in game['word']:
             game['guessed_letters'].add(guess)
+            word_complete = all(letter in game['guessed_letters'] for letter in game['word'])
             
-            if guess in game['word']:
-                new_hint = " ".join([c if c in game['guessed_letters'] else "_" for c in game['word']])
-                if "_" not in new_hint.replace(" ", ""):
-                    reward = 20
-                    await asyncio.to_thread(db.update_lbucks, message.author.id, reward)
-                    await message.channel.send(f"¡Completaste la palabra, {message.author.mention}! Era **'{game['word']}'**. Ganaste **{reward} LBucks**. 🥳")
-                    del word_games[channel_id]
-                else:
-                    await message.channel.send(f"¡Correcto! La letra '{guess}' está. Pista: `{new_hint}`")
+            if word_complete:
+                reward = 12 # <-- RECOMPENSA ACTUALIZADA
+                await asyncio.to_thread(db.update_lbucks, message.author.id, reward)
+                win_embed = create_hangman_embed(game, game_over_status="win")
+                await game_message.edit(embed=win_embed)
+                await message.channel.send(f"¡{message.author.mention} ha adivinado la palabra y gana **{reward} LBucks**!")
+                del word_games[channel_id]
             else:
-                game['rounds'] -= 1
-                if game['rounds'] > 0:
-                    await message.channel.send(f"La letra '{guess}' no está. Te quedan **{game['rounds']}** intentos.")
-                else:
-                    await message.channel.send(f"¡Se acabaron los intentos! La palabra era **'{game['word']}'**.")
-                    del word_games[channel_id]
+                update_embed = create_hangman_embed(game)
+                await game_message.edit(embed=update_embed)
+        else:
+            game['wrong_guesses'].add(guess)
+            game['mistakes'] += 1
+            
+            if game['mistakes'] >= len(HANGMAN_PICS) - 1:
+                loss_embed = create_hangman_embed(game, game_over_status="loss")
+                await game_message.edit(embed=loss_embed)
+                del word_games[channel_id]
+            else:
+                update_embed = create_hangman_embed(game)
+                await game_message.edit(embed=update_embed)
 
 
 # --- 5. COMANDOS SLASH ---
-
 @bot.slash_command(
     guild_ids=[GUILD_ID], name="ayuda", description="Muestra el menú de comandos."
 )
 async def ayuda(ctx: discord.ApplicationContext):
     await ctx.defer(ephemeral=True)
     embed = discord.Embed(
-        title="📚 Guía de Comandos",
+        title="📚 Guía de Comandos del Bot",
         description="Aquí tienes todos los comandos disponibles.",
         color=discord.Color.blue())
-    # ... (el resto del comando ayuda se mantiene igual)
+    
+    embed.add_field(name="💰 Economía", value="`/saldo`, `/donar`, `/canjear`, `/login_diario`", inline=False)
+    embed.add_field(name="🕹️ Juegos", value="`/juego palabra` (Ahorcado)\n`/juego numero` (Adivinar Número)\n`/adivinar` (Para el juego de número)", inline=False)
+    embed.add_field(name="👥 Social", value="`/invitaciones`", inline=False)
+    embed.add_field(name="📋 Misiones", value="`/misiones`", inline=False)
+    
+    embed.set_footer(text=f"Bot de {ctx.guild.name}")
     await ctx.followup.send(embed=embed, ephemeral=True)
 
-
+# ... (Aquí van los comandos /login_diario, /canjear, /saldo, /donar, /misiones, /invitaciones que no cambiaron)
 @bot.slash_command(
     guild_ids=[GUILD_ID], name="login_diario", description="Reclama tu recompensa diaria."
 )
@@ -487,10 +537,9 @@ async def misiones(ctx: discord.ApplicationContext):
                             view=UpdateMissionsView(),
                             ephemeral=True)
 
-# --- GRUPO DE COMANDOS PARA JUEGOS ---
 juegos_group = bot.create_group("juego", "Comandos para iniciar minijuegos", guild_ids=[GUILD_ID])
 
-@juegos_group.command(name="palabra", description="Inicia un juego de adivinar la palabra.")
+@juegos_group.command(name="palabra", description="Inicia un juego del ahorcado.")
 async def iniciar_juego_palabra(ctx: discord.ApplicationContext):
     await ctx.defer()
     channel_id = ctx.channel.id
@@ -503,16 +552,15 @@ async def iniciar_juego_palabra(ctx: discord.ApplicationContext):
     word_games[channel_id] = {
         'word': word_to_guess,
         'guessed_letters': set(),
+        'wrong_guesses': set(),
+        'mistakes': 0,
         'start_time': datetime.datetime.now(),
-        'rounds': 6,
+        'message_id': None
     }
-    hint = " ".join(["_" for _ in word_to_guess])
-    await ctx.followup.send(
-        f"¡Nuevo juego de adivinar la palabra! Tienen 7 minutos y 6 intentos.\n"
-        f"La palabra tiene **{len(word_to_guess)}** letras: `{hint}`\n"
-        "Envía una letra o la palabra completa en el chat para adivinar."
-    )
-
+    
+    initial_embed = create_hangman_embed(word_games[channel_id])
+    game_message = await ctx.followup.send(embed=initial_embed)
+    word_games[channel_id]['message_id'] = game_message.id
 
 @juegos_group.command(name="numero", description="Inicia un juego de adivinar el número.")
 async def iniciar_juego_numero(ctx: discord.ApplicationContext):
@@ -528,21 +576,19 @@ async def iniciar_juego_numero(ctx: discord.ApplicationContext):
     await ctx.respond(
         "🎉 **¡Nuevo juego de Adivinar el Número!** 🎉\n\n"
         "He pensado en un número del **1 al 100**. Tienen 2 minutos.\n"
-        "Usen `/adivinar numero` para hacer un intento. ¡Suerte!"
+        "Usen `/adivinar` para hacer un intento. ¡Suerte!"
     )
-
 
 @bot.slash_command(
     guild_ids=[GUILD_ID], name="adivinar", description="Adivina el número del juego actual."
 )
 async def adivinar_numero(ctx: discord.ApplicationContext, numero: int):
+    await ctx.defer()
     channel_id = ctx.channel.id
     if channel_id not in number_games:
-        await ctx.respond("No hay ningún juego de adivinar el número activo. Inícialo con `/juego numero`.", ephemeral=True)
+        await ctx.followup.send("No hay ningún juego de adivinar el número activo. Inícialo con `/juego numero`.", ephemeral=True)
         return
-    
-    # El defer se hace aquí para que la respuesta sea pública
-    await ctx.defer(ephemeral=False)
+
     game = number_games[channel_id]
     
     if datetime.datetime.now() - game['start_time'] > datetime.timedelta(minutes=2):
@@ -561,39 +607,31 @@ async def adivinar_numero(ctx: discord.ApplicationContext, numero: int):
         await ctx.followup.send(f"`{numero}` es muy alto. El número es **menor**.")
 
 
-@bot.slash_command(
-    guild_ids=[GUILD_ID], name="invitaciones", description="Muestra tus invitaciones."
-)
-async def show_invites(ctx: discord.ApplicationContext):
-    await ctx.defer(ephemeral=True)
-    inviter_id = ctx.user.id
-    invites_count = await asyncio.to_thread(db.get_invite_count, inviter_id)
-    await ctx.followup.send(
-        f"Has invitado a **{invites_count}** personas al servidor. ¡Sigue así! 🚀",
-        ephemeral=True)
-
-
 # --- 6. COMANDOS DE ADMINISTRACIÓN ---
 admin_commands = bot.create_group("admin", "Comandos de administración", guild_ids=[GUILD_ID])
 
 @admin_commands.command(name="add_lbucks", description="Añade LBucks a un usuario.")
-@discord.default_permissions(administrator=True)
 async def add_lbucks(ctx: discord.ApplicationContext, usuario: discord.Member, cantidad: int):
+    admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
+    if admin_role is None or admin_role not in ctx.author.roles:
+        await ctx.respond("Este comando es solo para usuarios con el rol de administrador del bot.", ephemeral=True)
+        return
+        
     await ctx.defer(ephemeral=True)
-    # ... (código del comando sin cambios)
+    await asyncio.to_thread(db.update_lbucks, usuario.id, cantidad)
+    action = "añadido" if cantidad >= 0 else "quitado"
     await ctx.followup.send(
-        f"Se han añadido {cantidad} LBucks a {usuario.mention}.",
+        f"Se han **{action} {abs(cantidad)} LBucks** a {usuario.mention}.",
         ephemeral=True)
+
 
 # --- 7. SERVIDOR WEB Y EJECUCIÓN ---
 app = Flask('')
-
 @app.route('/')
 def home():
     return "El bot está vivo."
 
 def run_web_server():
-    # Obtiene el puerto de la variable de entorno para Render
     port = int(os.environ.get('PORT', 8080))
     serve(app, host="0.0.0.0", port=port)
 
