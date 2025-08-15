@@ -485,12 +485,43 @@ async def ayuda(ctx: discord.ApplicationContext):
 
 # ... (Aquí van los comandos /login_diario, /canjear, /saldo, /donar, /misiones, /invitaciones que no cambiaron)
 @bot.slash_command(
-    guild_ids=[GUILD_ID], name="login_diario", description="Reclama tu recompensa diaria."
+    guild_ids=[GUILD_ID],
+    name="login_diario 💷",
+    description="Reclama tu recompensa diaria."
 )
 async def daily_command(ctx: discord.ApplicationContext):
     await ctx.defer(ephemeral=True)
-    # ... (código del comando sin cambios)
-    await ctx.followup.send("¡Has recibido 5 LBucks! 🪙", ephemeral=True)
+    try:
+        user_id = ctx.user.id
+        # La función de la base de datos debe devolver al usuario, creándolo si no existe.
+        user_data = await asyncio.to_thread(db.get_user, user_id)
+        
+        # El índice 2 corresponde a la columna 'last_daily_claim' en tu base de datos
+        last_claim_str = user_data[2]
+        
+        if last_claim_str is not None:
+            # Convertimos el texto de la base de datos a un objeto de fecha y hora consciente de la zona horaria
+            last_claim_time = datetime.datetime.fromisoformat(last_claim_str).replace(tzinfo=datetime.timezone.utc)
+            current_time = datetime.datetime.now(datetime.timezone.utc)
+            
+            # Comparamos si han pasado menos de 15 horas
+            if current_time - last_claim_time < datetime.timedelta(hours=15):
+                time_left = datetime.timedelta(hours=15) - (current_time - last_claim_time)
+                hours, remainder = divmod(int(time_left.total_seconds()), 3600)
+                minutes, _ = divmod(remainder, 60)
+                
+                await ctx.followup.send(f"Ya reclamaste tu recompensa. Vuelve en **{hours}h {minutes}m**.", ephemeral=True)
+                return
+
+        # Si 'last_claim_str' es None o si ya pasaron las 15 horas, se entrega la recompensa
+        await asyncio.to_thread(db.update_lbucks, user_id, 5) # Recompensa de 5 LBucks
+        await asyncio.to_thread(db.update_daily_claim, user_id) # Actualiza la hora del reclamo en la DB
+        
+        await ctx.followup.send("¡Has reclamado tu recompensa de 5 LBucks! Vuelve en 15 horas. 🪙", ephemeral=True)
+
+    except Exception as e:
+        print(f"🚨 Error inesperado en daily_command: {e}")
+        await ctx.followup.send("Ocurrió un error al procesar tu recompensa. Por favor, intenta de nuevo más tarde.", ephemeral=True)
 
 
 @bot.slash_command(
