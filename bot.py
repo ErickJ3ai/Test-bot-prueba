@@ -417,6 +417,59 @@ async def on_member_join(member):
         invites_cache[member.guild.id] = await member.guild.invites()
 
 
+@bot.listen("on_raw_reaction_add")
+async def mission_reaction_tracker(payload: discord.RawReactionActionEvent):
+    """
+    Listener que se activa cuando un usuario añade una reacción a un mensaje.
+    """
+    if not payload.guild_id:
+        return
+
+    user = bot.get_user(payload.user_id)
+    if not user or user.bot:
+        return
+
+    try:
+        channel = await bot.fetch_channel(payload.channel_id)
+        message = await channel.fetch_message(payload.message_id)
+
+        # Evitar progreso por reaccionar a mensajes de bots o a los propios
+        if message.author.bot or message.author.id == user.id:
+            return
+            
+        await asyncio.to_thread(
+            db.update_mission_progress,
+            payload.user_id,
+            "reaction_add"
+        )
+        print(f"Misión de reacción registrada para {user.name}.")
+
+    except (discord.NotFound, discord.Forbidden):
+        pass # El mensaje o canal fue borrado o no hay permisos
+    except Exception as e:
+        print(f"Error en el listener de reacciones: {e}")
+
+
+@bot.event
+async def on_application_command_completion(ctx: discord.ApplicationContext):
+    """
+    Listener que se activa después de que cualquier comando slash se completa.
+    """
+    if ctx.author.bot:
+        return
+    
+    # Enviamos el nombre específico del comando a la base de datos
+    await asyncio.to_thread(
+        db.update_mission_progress, 
+        ctx.author.id, 
+        "slash_command_use", 
+        command_name=ctx.command.name
+    )
+    print(f"Misión de comando slash '{ctx.command.name}' registrada para {ctx.author.name}.")
+
+# ... (Aquí continúan los demás listeners que ya tienes, como on_message y on_voice_state_update)
+
+
 @bot.listen("on_message")
 async def on_message_handler(message):
     if message.author.bot:
