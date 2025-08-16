@@ -22,7 +22,7 @@ TOKEN = os.environ['DISCORD_TOKEN']
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
-intents.reactions = true
+intents.reactions = True
 bot = discord.Bot(intents=intents)
 
 # --- 2. JUEGOS, LISTAS Y GESTIÓN DE ESTADO ---
