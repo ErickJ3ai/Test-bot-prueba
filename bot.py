@@ -390,6 +390,23 @@ async def on_ready():
 
 
 @bot.event
+async def on_application_command_completion(ctx: discord.ApplicationContext):
+    """
+    Listener que se activa después de que cualquier comando slash se completa exitosamente.
+    """
+    if ctx.author.bot:
+        return
+    
+    # Ahora enviamos el nombre específico del comando a la base de datos
+    await asyncio.to_thread(
+        db.update_mission_progress, 
+        ctx.author.id, 
+        "slash_command_use", 
+        command_name=ctx.command.name
+    )
+
+
+@bot.event
 async def on_member_join(member):
     await asyncio.sleep(5)
     try:
