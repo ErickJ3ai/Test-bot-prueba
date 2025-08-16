@@ -22,12 +22,13 @@ TOKEN = os.environ['DISCORD_TOKEN']
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
+intents.reactions = true
 bot = discord.Bot(intents=intents)
 
 # --- 2. JUEGOS, LISTAS Y GESTIÓN DE ESTADO ---
 number_games = {}
 word_games = {}
-
+voice_join_times = {}
 # Puedes agregar todas las palabras que quieras a esta lista
 PALABRAS_LOCALES = [
     "computadora", "biblioteca", "desarrollo", "guitarra", "universo",
@@ -40,7 +41,11 @@ PALABRAS_LOCALES = [
     "veracidad", "parlamento", "oratoria", "permutaciones", "formalidad", 
     "otorrinolaringologo", "esternocleidomastoideo", "Ovoviparo", "anacronismo", 
     "calamidad", "cardiologo", "Indomito", "frecuente", "Principalmente", "Contrarrevolucionario", 
-    "Cientificismo", "Paralelepipedo", "Transustanciacion"
+    "Cientificismo", "Paralelepipedo", "Transustanciacion", "estampida", "primogenitos", 
+    "judicatura", "estacionario", "cualificacion", "historiagrama", "gubernamental", 
+    "adjudicarse", "Muchedumbre", "hidraulico", "criminologia", "revolucion", "tirania", 
+    "embebido", "embotellamiento", "electromagnetismo", "cuantitativo", "cualitativo", 
+    "primavera", "empobrecer", "egocentrismo", "abstraccion", "abstinencia"
 ]
 
 HANGMAN_PICS = [
@@ -390,23 +395,6 @@ async def on_ready():
 
 
 @bot.event
-async def on_application_command_completion(ctx: discord.ApplicationContext):
-    """
-    Listener que se activa después de que cualquier comando slash se completa exitosamente.
-    """
-    if ctx.author.bot:
-        return
-    
-    # Ahora enviamos el nombre específico del comando a la base de datos
-    await asyncio.to_thread(
-        db.update_mission_progress, 
-        ctx.author.id, 
-        "slash_command_use", 
-        command_name=ctx.command.name
-    )
-
-
-@bot.event
 async def on_member_join(member):
     await asyncio.sleep(5)
     try:
@@ -479,6 +467,39 @@ async def on_message_handler(message):
             else:
                 update_embed = create_hangman_embed(game)
                 await game_message.edit(embed=update_embed)
+
+
+# Reemplaza tu listener de voz actual con este en bot.py
+@bot.listen("on_voice_state_update")
+async def mission_voice_tracker(member, before, after):
+    if member.bot:
+        return
+
+    # Caso 1: Usuario ENTRA a un canal de voz
+    if before.channel is None and after.channel is not None:
+        # Guardamos la hora exacta en que se unió
+        voice_join_times[member.id] = datetime.datetime.now()
+        print(f"{member.name} se unió al canal de voz.")
+
+    # Caso 2: Usuario SALE de un canal de voz
+    elif before.channel is not None and after.channel is None:
+        # Verificamos si habíamos guardado su hora de entrada
+        if member.id in voice_join_times:
+            join_time = voice_join_times.pop(member.id) # Obtenemos y eliminamos su registro
+            duration_seconds = (datetime.datetime.now() - join_time).total_seconds()
+            
+            # Convertimos la duración a minutos y la redondeamos
+            duration_minutes = round(duration_seconds / 60)
+
+            # Solo actualizamos la misión si estuvo al menos 1 minuto para no contar entradas y salidas rápidas
+            if duration_minutes > 0:
+                print(f"{member.name} salió. Duración: {duration_minutes} minuto(s). Actualizando misión.")
+                await asyncio.to_thread(
+                    db.update_mission_progress,
+                    member.id,
+                    "voice_minutes",  # Asegúrate que este 'mission_type' coincida con tu DB
+                    progress_increase=duration_minutes
+                )
 
 
 # --- 5. COMANDOS SLASH ---
