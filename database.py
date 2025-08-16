@@ -111,7 +111,8 @@ def get_daily_missions(user_id):
         print(f"[DB ERROR] Error en get_daily_missions: {e}")
         return []
 
-def update_mission_progress(user_id, mission_type, progress_increase=1):
+# Reemplaza esta función completa en database.py
+def update_mission_progress(user_id, mission_type, progress_increase=1, command_name=None):
     try:
         today = datetime.date.today().isoformat()
         response = supabase.from_('user_missions').select('id, progress, mission_id, is_completed').eq('user_id', str(user_id)).eq('assigned_date', today).eq('is_completed', False).execute()
@@ -120,19 +121,27 @@ def update_mission_progress(user_id, mission_type, progress_increase=1):
             mission_details = supabase.from_('missions').select('*').eq('mission_id', user_mission['mission_id']).execute().data[0]
             
             if mission_details['mission_type'] == mission_type:
-                new_progress = user_mission['progress'] + progress_increase
+                # --- LÓGICA MEJORADA ---
+                # 1. Obtenemos el comando específico que la misión requiere (si lo tiene)
+                required_command = mission_details.get('trigger_value')
                 
+                # 2. Si la misión requiere un comando específico, y no es el que se usó, la ignoramos.
+                if required_command and required_command != command_name:
+                    continue # Pasa a la siguiente misión del usuario
+
+                # --- FIN DE LA LÓGICA MEJORADA ---
+
+                new_progress = user_mission['progress'] + progress_increase
                 is_completed = new_progress >= mission_details['target_value']
                 
-                supabase.from_('user_missions').upsert({
-                    'id': user_mission['id'],
+                supabase.from_('user_missions').update({
                     'progress': new_progress,
                     'is_completed': is_completed
-                }).execute()
+                }).eq('id', user_mission['id']).execute()
                 
                 if is_completed:
                     update_lbucks(user_id, mission_details['reward'])
-                    print(f"Misión completada por {user_id}. Recompensa: {mission_details['reward']} LBucks.")
+                    print(f"Misión '{mission_details['description']}' completada por {user_id}. Recompensa: {mission_details['reward']} LBucks.")
                 
     except Exception as e:
         print(f"[DB ERROR] Error en update_mission_progress: {e}")
