@@ -29,6 +29,58 @@ bot = discord.Bot(intents=intents)
 number_games = {}
 word_games = {}
 voice_join_times = {}
+# --- DATOS DEL JUEGO DE AVENTURA ---
+PLANET_NAMES = [
+    "Xylar", "Krypton Prime", "Nebulon-9", "Cygnus X-1", "Aethelgard",
+    "Veridian-IV", "Ryzen-7", "Gliese-581g", "Kepler-186f", "Trappist-1e",
+    "Zandor", "Helios Prime", "Orionis", "Sirius-B", "Proxima Centauri-b",
+    "Andromeda-IX", "Magellanic Cloud-3", "Taurus-V", "Lyra-Delta", "Draco-II",
+    "Aquila-Rift", "Pegasus-Omega", "Ursa-Minor-Beta", "Hydra-Core", "Volantis",
+    "Qo'noS", "Cardassia-Prime", "Vulcan", "Ryloth", "Tatooine-Secundus"
+]
+LOOT_TABLE = {
+    'Fácil': [
+        {'name': 'Fragmento de Titanio', 'value': 5},
+        {'name': 'Cableado Básico', 'value': 3},
+        {'name': 'Chatarra Espacial', 'value': 1}
+    ],
+    'Intermedio': [
+        {'name': 'Placa de Acero Reforzado', 'value': 15},
+        {'name': 'Cristal de Kyber (Pequeño)', 'value': 20},
+        {'name': 'Procesador de Navegación', 'value': 18}
+    ],
+    'Difícil': [
+        {'name': 'Núcleo de Energía de Singularidad', 'value': 50},
+        {'name': 'Aleación de Neutronio', 'value': 60},
+        {'name': 'Mapa Estelar Antiguo', 'value': 45}
+    ]
+}
+SHOP_ITEMS = {
+    'blaster_basico': {'name': 'Bláster Básico MK2', 'price': 50, 'power_increase': 5, 'type': 'ship'},
+    'escudo_inicial': {'name': 'Escudo Deflector Básico', 'price': 75, 'power_increase': 8, 'type': 'ship'},
+    'mina_automatica': {'name': 'Mina Automática de Asteroides', 'price': 100, 'power_increase': 12, 'type': 'station'},
+    'torreta_defensiva': {'name': 'Torreta de Defensa Orbital', 'price': 120, 'power_increase': 15, 'type': 'station'}
+}
+ASCII_ART = {
+    'intro': """
+     _.-._
+   | | | |_
+   | | | | |
+   | | | | |
+ _ |  '-._ |
+ \`'--'   ' ._
+  '.____.'__`'-,
+   `--..____'.   '.
+   ​'.--.     '..' .   |
+'. '-..____.'.    ' | '.       '.   .' '.        ' '._ '--.._
+'.               '--.._ '-.      /            '--.._
+'---'                    '---.._
+`'---.._
+""",
+    'station': """
+    """
+}
+
 # Puedes agregar todas las palabras que quieras a esta lista
 PALABRAS_LOCALES = [
     "computadora", "biblioteca", "desarrollo", "guitarra", "universo",
@@ -371,6 +423,81 @@ class UpdateMissionsView(View):
                     inline=False)
         await interaction.followup.send(embed=embed, view=self, ephemeral=True)
 
+class PlanetSelectionView(discord.ui.View):
+    def __init__(self, planets: list, author_id: int):
+        super().__init__(timeout=180)
+        self.author_id = author_id
+        
+        for planet in planets:
+            button = discord.ui.Button(
+                label=f"{planet['name']} ({planet['difficulty']})",
+                style=self.get_button_style(planet['difficulty']),
+                custom_id=f"planet_{planet['planet_id']}"
+            )
+            button.callback = self.planet_button_callback
+            self.add_item(button)
+            
+    def get_button_style(self, difficulty: str) -> discord.ButtonStyle:
+        if difficulty == 'Fácil': return discord.ButtonStyle.success
+        if difficulty == 'Intermedio': return discord.ButtonStyle.primary
+        if difficulty == 'Difícil': return discord.ButtonStyle.danger
+        return discord.ButtonStyle.secondary
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("No puedes usar los botones de otro comandante.", ephemeral=True)
+            return False
+        return True
+
+    async def planet_button_callback(self, interaction: discord.Interaction):
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(view=self)
+
+        player_id = interaction.user.id
+        planet_id = int(interaction.data['custom_id'].split('_')[1])
+        
+        planet = await asyncio.to_thread(db.get_planet_by_id, planet_id)
+        player = await asyncio.to_thread(db.get_player_profile, player_id)
+
+        if not planet or not player:
+            await interaction.followup.send("Hubo un error al obtener los datos del combate. Inténtalo de nuevo.", ephemeral=True)
+            return
+
+        difficulty_multiplier = {'Fácil': 0.5, 'Intermedio': 1.0, 'Difícil': 1.5}
+        planet_power = random.randint(5, 20) * difficulty_multiplier.get(planet['difficulty'], 1.0)
+        player_power = player['power_level']
+        
+        chance_to_win = min(0.95, 0.5 + ((player_power - planet_power) / (player_power + 1)))
+
+        if random.random() < chance_to_win:
+            reward = planet['reward_lbucks']
+            loot = random.choice(LOOT_TABLE.get(planet['difficulty'], []))
+            
+            await asyncio.to_thread(db.update_lbucks, player_id, reward)
+            
+            current_inventory = player['inventory']
+            current_inventory.append(loot)
+            
+            conquered_planets = player['conquered_planets']
+            conquered_planets.append(planet['name'])
+            
+            updates = {
+                'inventory': current_inventory,
+                'conquered_planets': conquered_planets
+            }
+            await asyncio.to_thread(db.update_player_profile, player_id, updates)
+            
+            embed = discord.Embed(title=f"✅ ¡Victoria en {planet['name']}!", color=discord.Color.green())
+            embed.description = "Has conquistado el planeta y asegurado sus recursos."
+            embed.add_field(name="Recompensa Obtenida", value=f"**{reward}** LBucks 🪙")
+            embed.add_field(name="Material Recuperado", value=f"**1x {loot['name']}**")
+        else:
+            embed = discord.Embed(title=f"❌ Derrota en {planet['name']}", color=discord.Color.red())
+            embed.description = "Las defensas del planeta eran demasiado fuertes. Tu nave ha sufrido daños, pero logró escapar. Necesitarás más poder para conquistarlo."
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        
 # --- 4. EVENTOS Y LISTENERS ---
 invites_cache = {}
 
@@ -575,7 +702,8 @@ async def ayuda(ctx: discord.ApplicationContext):
         description="Aquí tienes todos los comandos disponibles.",
         color=discord.Color.blue())
     
-    embed.add_field(name="💰 Economía", value="`/saldo`, `/donar`, `/canjear`, `/login_diario`", inline=False)
+    embed.add_field(name="💰 Economía", value="`/saldo`, `/donar`, `/canjear`, `/login_diario`, `/leaderboard`", inline=False)
+    embed.add_field(name="🚀 Aventura Espacial", value="`/aventura iniciar`, `/aventura perfil`, `/aventura explorar`", inline=False)
     embed.add_field(name="🕹️ Juegos", value="`/juego palabra` (Ahorcado)\n`/juego numero` (Adivinar Número)\n`/adivinar` (Para el juego de número)", inline=False)
     embed.add_field(name="👥 Social", value="`/invitaciones`", inline=False)
     embed.add_field(name="📋 Misiones", value="`/misiones`", inline=False)
@@ -667,6 +795,39 @@ async def misiones(ctx: discord.ApplicationContext):
                             view=UpdateMissionsView(),
                             ephemeral=True)
 
+
+@bot.slash_command(
+    guild_ids=[GUILD_ID], name="leaderboard", description="Muestra la clasificación de LBucks del servidor."
+)
+async def leaderboard(ctx: discord.ApplicationContext):
+    await ctx.defer()
+    
+    top_users = await asyncio.to_thread(db.get_lbucks_leaderboard, 10)
+    
+    embed = discord.Embed(
+        title="🏆 Clasificación de LBucks",
+        description="¡Los comandantes más ricos de la galaxia!",
+        color=discord.Color.gold()
+    )
+    
+    leaderboard_text = ""
+    for i, (user_id, lbucks) in enumerate(top_users):
+        try:
+            user = await bot.fetch_user(int(user_id))
+            user_mention = user.mention
+        except (discord.NotFound, ValueError):
+            user_mention = f"Usuario Desconocido ({user_id})"
+        
+        emoji = ["🥇", "🥈", "🥉"][i] if i < 3 else "🔹"
+        leaderboard_text += f"{emoji} **{i+1}.** {user_mention} - **{lbucks}** LBucks 🪙\n"
+        
+    if not leaderboard_text:
+        leaderboard_text = "Todavía no hay nadie en la clasificación. ¡Sé el primero!"
+        
+    embed.add_field(name="Top 10 Comandantes", value=leaderboard_text, inline=False)
+    await ctx.followup.send(embed=embed)
+
+
 juegos_group = bot.create_group("juego", "Comandos para iniciar minijuegos", guild_ids=[GUILD_ID])
 
 @juegos_group.command(name="palabra", description="Inicia un juego del ahorcado.")
@@ -736,6 +897,81 @@ async def adivinar_numero(ctx: discord.ApplicationContext, numero: int):
     else:
         await ctx.followup.send(f"`{numero}` es muy alto. El número es **menor**.")
 
+adventure_group = bot.create_group("aventura", "Comandos para la aventura espacial", guild_ids=[GUILD_ID])
+
+@adventure_group.command(name="iniciar", description="Comienza tu aventura espacial y funda tu estación.")
+async def aventura_iniciar(ctx: discord.ApplicationContext):
+    await ctx.defer(ephemeral=True)
+    
+    player = await asyncio.to_thread(db.get_player_profile, ctx.author.id)
+    if player:
+        await ctx.followup.send("Comandante, ya has iniciado tu aventura. Usa `/aventura perfil` para ver tu estado.", ephemeral=True)
+        return
+        
+    await asyncio.to_thread(db.create_player_profile, ctx.author.id)
+    
+    intros = [
+        "Tras escapar del colapso de la Supernova Kepler, tu cápsula de escape aterriza en un sector desconocido. Con los restos de tu nave, estableces una base precaria. El universo te espera.",
+        "Eres un comerciante renegado, buscando fortuna en el Borde Exterior. Has encontrado un asteroide rico en recursos y has decidido que es hora de construir tu propio imperio.",
+        "Como último superviviente de la Expedición a Andrómeda, tu misión ahora es sobrevivir. Tu estación es tu único refugio, y tu pequeña nave, tu única esperanza."
+    ]
+    
+    embed = discord.Embed(
+        title=f"🚀 Bienvenid@ a la Frontera, Comandante {ctx.author.name}!",
+        description=random.choice(intros),
+        color=discord.Color.dark_purple()
+    )
+    embed.add_field(name="Estación Fundada", value=f"Has establecido tu base de operaciones.\n{ASCII_ART['station']}", inline=False)
+    embed.add_field(name="Nave Operativa", value=f"Tu nave inicial está lista para explorar.\n{ASCII_ART['intro']}", inline=False)
+    embed.set_footer(text="Usa /aventura explorar para buscar tu primer planeta.")
+    
+    await ctx.followup.send(embed=embed, ephemeral=True)
+
+@adventure_group.command(name="perfil", description="Muestra el estado de tu nave, estación e inventario.")
+async def aventura_perfil(ctx: discord.ApplicationContext):
+    await ctx.defer(ephemeral=True)
+    player = await asyncio.to_thread(db.get_player_profile, ctx.author.id)
+
+    if not player:
+        await ctx.followup.send("Aún no has comenzado tu aventura. Usa `/aventura iniciar` para empezar.", ephemeral=True)
+        return
+
+    inventory = player['inventory']
+    inventory_text = "\n".join([f"- {item['name']}" for item in inventory]) if inventory else "Vacío"
+
+    embed = discord.Embed(title=f"Perfil del Comandante {ctx.author.name}", color=discord.Color.blue())
+    embed.set_thumbnail(url=ctx.author.display_avatar.url)
+    embed.add_field(name="🚀 Nivel de Nave", value=f"**Nivel {player['ship_level']}**", inline=True)
+    embed.add_field(name="🏛️ Nivel de Estación", value=f"**Nivel {player['station_level']}**", inline=True)
+    embed.add_field(name="💥 Poder de Combate", value=f"**{player['power_level']}**", inline=True)
+    embed.add_field(name="📦 Inventario", value=f"```{inventory_text}```", inline=False)
+    
+    await ctx.followup.send(embed=embed, ephemeral=True)
+
+@adventure_group.command(name="explorar", description="Busca nuevos planetas para conquistar.")
+async def aventura_explorar(ctx: discord.ApplicationContext):
+    await ctx.defer(ephemeral=True)
+    player = await asyncio.to_thread(db.get_player_profile, ctx.author.id)
+
+    if not player:
+        await ctx.followup.send("Debes iniciar tu aventura primero con `/aventura iniciar`.", ephemeral=True)
+        return
+
+    conquered_list = player['conquered_planets']
+    planets = await asyncio.to_thread(db.get_explorable_planets, conquered_list)
+    
+    if not planets:
+        await ctx.followup.send("¡Felicidades, Comandante! Parece que has conquistado toda la galaxia conocida.", ephemeral=True)
+        return
+        
+    embed = discord.Embed(
+        title="🔭 Escáner de Largo Alcance Activado",
+        description="Se han detectado los siguientes sistemas planetarios. Elige tu próximo objetivo:",
+        color=discord.Color.teal()
+    )
+    
+    view = PlanetSelectionView(planets, ctx.author.id)
+    await ctx.followup.send(embed=embed, view=view, ephemeral=True)
 
 # --- 6. COMANDOS DE ADMINISTRACIÓN ---
 admin_commands = bot.create_group("admin", "Comandos de administración", guild_ids=[GUILD_ID])
