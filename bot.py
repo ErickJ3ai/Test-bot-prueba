@@ -990,6 +990,55 @@ async def add_lbucks(ctx: discord.ApplicationContext, usuario: discord.Member, c
         f"Se han **{action} {abs(cantidad)} LBucks** a {usuario.mention}.",
         ephemeral=True)
 
+@admin_commands.command(name="poblar_planetas", description="[USO ÚNICO] Llena la base de datos con los planetas.")
+async def poblar_planetas_db(ctx: discord.ApplicationContext):
+    """
+    Comando de admin para ejecutar una sola vez y llenar la tabla de planetas.
+    """
+    admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
+    if admin_role is None or admin_role not in ctx.author.roles:
+        await ctx.respond("Este comando es solo para administradores.", ephemeral=True)
+        return
+
+    await ctx.defer(ephemeral=True)
+    
+    try:
+        await ctx.followup.send("⏳ **Iniciando proceso...** Borrando planetas antiguos para evitar duplicados...", ephemeral=True)
+        
+        # Lógica del script 'populate' directamente aquí
+        supabase = db.supabase # Accedemos al cliente de supabase desde tu archivo database.py
+        
+        # 1. Borrar planetas existentes
+        supabase.from_('adventure_planets').delete().neq('planet_id', 0).execute()
+
+        # 2. Preparar los nuevos planetas
+        planets_to_insert = []
+        for name in PLANET_NAMES: # PLANET_NAMES ya está definido en tu bot.py
+            difficulty_roll = random.random()
+            if difficulty_roll < 0.5:
+                difficulty = 'Fácil'
+                reward = 3
+            elif difficulty_roll < 0.85:
+                difficulty = 'Intermedio'
+                reward = 10
+            else:
+                difficulty = 'Difícil'
+                reward = 19
+            planets_to_insert.append({
+                'name': name,
+                'difficulty': difficulty,
+                'reward_lbucks': reward
+            })
+        
+        # 3. Insertar los nuevos planetas
+        supabase.from_('adventure_planets').insert(planets_to_insert).execute()
+        
+        await ctx.followup.send(f"✅ **¡Éxito!** Se han insertado **{len(planets_to_insert)}** planetas en la base de datos.", ephemeral=True)
+
+    except Exception as e:
+        await ctx.followup.send(f"❌ **Error:** Ocurrió un problema al poblar la base de datos: {e}", ephemeral=True)
+        print(f"Error en /admin poblar_planetas: {e}")
+
 
 # --- 7. SERVIDOR WEB Y EJECUCIÓN ---
 app = Flask('')
