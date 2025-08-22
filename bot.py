@@ -90,13 +90,13 @@ UPGRADE_CATALOG = {
             # Nivel 2
             {
                 "level": 2, "power_increase": 15,
-                "cost_lbucks": 100,
+                "cost_lbucks": 60,
                 "cost_materials": {"Fragmento de Titanio": 5, "Cableado Básico": 3}
             },
             # Nivel 3
             {
                 "level": 3, "power_increase": 25,
-                "cost_lbucks": 250,
+                "cost_lbucks": 140,
                 "cost_materials": {"Placa de Acero Reforzado": 3, "Procesador de Navegación": 1}
             },
         ]
@@ -511,8 +511,12 @@ class PlanetSelectionView(discord.ui.View):
         chance_to_win = min(0.95, 0.5 + ((player_power - planet_power) / (player_power + 1)))
 
         if random.random() < chance_to_win:
+            # --- VICTORIA ---
             reward = planet['reward_lbucks']
             loot = random.choice(LOOT_TABLE.get(planet['difficulty'], []))
+            
+            # ▼▼▼ AÑADIDO: Recompensa de poder por ganar ▼▼▼
+            power_reward = 1 # Gana 1 de poder por cada conquista. ¡Puedes cambiar este valor!
             
             await asyncio.to_thread(db.update_lbucks, player_id, reward)
             
@@ -522,22 +526,29 @@ class PlanetSelectionView(discord.ui.View):
             conquered_planets = player['conquered_planets']
             conquered_planets.append(planet['name'])
             
+            # Preparamos la actualización para la base de datos
             updates = {
                 'inventory': current_inventory,
-                'conquered_planets': conquered_planets
+                'conquered_planets': conquered_planets,
+                'power_level': player['power_level'] + power_reward # <--- AÑADIDO: Sumamos el nuevo poder
             }
             await asyncio.to_thread(db.update_player_profile, player_id, updates)
             
+            # Actualizamos el mensaje de victoria para mostrar el nuevo poder
             embed = discord.Embed(title=f"✅ ¡Victoria en {planet['name']}!", color=discord.Color.green())
-            embed.description = "Has conquistado el planeta y asegurado sus recursos."
+            embed.description = f"Has conquistado el planeta y tu poder ha aumentado en **+{power_reward}**."
             embed.add_field(name="Recompensa Obtenida", value=f"**{reward}** LBucks 🪙")
             embed.add_field(name="Material Recuperado", value=f"**1x {loot['name']}**")
+            embed.add_field(name="Poder de Combate Actual", value=f"**{player['power_level'] + power_reward}** 💥") # <--- AÑADIDO
+        
         else:
+            # --- DERROTA ---
+            # (Esta parte no cambia)
             embed = discord.Embed(title=f"❌ Derrota en {planet['name']}", color=discord.Color.red())
             embed.description = "Las defensas del planeta eran demasiado fuertes. Tu nave ha sufrido daños, pero logró escapar. Necesitarás más poder para conquistarlo."
 
         await interaction.followup.send(embed=embed, ephemeral=True)
-
+        
 # En bot.py, sección 3
 
 class UpgradeSelectionView(discord.ui.View):
