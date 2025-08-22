@@ -3,6 +3,7 @@ from supabase import create_client, Client
 import os
 import datetime
 import random
+import json
 
 # --- CONFIGURACIÓN E INICIALIZACIÓN ---
 url: str = os.environ.get("SUPABASE_URL")
@@ -216,3 +217,71 @@ def update_redemption_status(redemption_id, status):
         supabase.from_('redemptions').upsert({'redemption_id': redemption_id, 'status': status}).execute()
     except Exception as e:
         print(f"[DB ERROR] Error en update_redemption_status: {e}")
+
+# --- FUNCIONES PARA EL LEADERBOARD ---
+
+def get_lbucks_leaderboard(limit=10):
+    """Obtiene los usuarios con más LBucks desde la tabla 'users'."""
+    try:
+        response = supabase.from_('users').select('user_id, lbucks').order('lbucks', desc=True).limit(limit).execute()
+        return [(user['user_id'], user['lbucks']) for user in response.data]
+    except Exception as e:
+        print(f"[DB ERROR] Error en get_lbucks_leaderboard: {e}")
+        return []
+
+# --- FUNCIONES PARA LA AVENTURA ESPACIAL ---
+
+def get_player_profile(user_id):
+    """Obtiene el perfil de aventura de un jugador desde 'adventure_players'."""
+    try:
+        response = supabase.from_('adventure_players').select('*').eq('user_id', str(user_id)).execute()
+        return response.data[0] if response.data else None
+    except Exception as e:
+        print(f"[DB ERROR] Error en get_player_profile: {e}")
+        return None
+
+def create_player_profile(user_id):
+    """Crea un nuevo perfil de aventura para un jugador."""
+    try:
+        supabase.from_('adventure_players').insert({'user_id': str(user_id)}).execute()
+        print(f"Perfil de aventura creado para el usuario {user_id}")
+    except Exception as e:
+        print(f"[DB ERROR] Error en create_player_profile: {e}")
+
+def update_player_profile(user_id, updates: dict):
+    """Actualiza campos específicos del perfil de un jugador.
+    Ejemplo de updates: {'ship_level': 2, 'power_level': 15}
+    """
+    try:
+        supabase.from_('adventure_players').update(updates).eq('user_id', str(user_id)).execute()
+    except Exception as e:
+        print(f"[DB ERROR] Error en update_player_profile: {e}")
+
+def get_planet_by_id(planet_id):
+    """Obtiene la información de un planeta por su ID."""
+    try:
+        response = supabase.from_('adventure_planets').select('*').eq('planet_id', planet_id).single().execute()
+        return response.data
+    except Exception as e:
+        print(f"[DB ERROR] Error en get_planet_by_id: {e}")
+        return None
+
+def get_explorable_planets(conquered_planet_names: list):
+    """Obtiene planetas que el usuario NO ha conquistado."""
+    try:
+        query = supabase.from_('adventure_planets').select('*')
+        if conquered_planet_names:
+            # .not_('columna', 'in', ('valor1', 'valor2'))
+            query = query.not_('name', 'in', tuple(conquered_planet_names))
+        
+        response = query.execute()
+        
+        # Supabase no tiene un random() directo en la API, así que lo hacemos en Python
+        available_planets = response.data
+        if len(available_planets) <= 3:
+            return available_planets
+        return random.sample(available_planets, k=3)
+
+    except Exception as e:
+        print(f"[DB ERROR] Error en get_explorable_planets: {e}")
+        return []
