@@ -81,6 +81,46 @@ ASCII_ART = {
     """
 }
 
+# En bot.py, sección 2
+
+UPGRADE_CATALOG = {
+    "ship": {
+        "name": "Nave",
+        "upgrades": [
+            # Nivel 2
+            {
+                "level": 2, "power_increase": 15,
+                "cost_lbucks": 100,
+                "cost_materials": {"Fragmento de Titanio": 5, "Cableado Básico": 3}
+            },
+            # Nivel 3
+            {
+                "level": 3, "power_increase": 25,
+                "cost_lbucks": 250,
+                "cost_materials": {"Placa de Acero Reforzado": 3, "Procesador de Navegación": 1}
+            },
+        ]
+    },
+    "station": {
+        "name": "Estación",
+        "upgrades": [
+            # Nivel 2
+            {
+                "level": 2, "power_increase": 10,
+                "cost_lbucks": 120,
+                "cost_materials": {"Fragmento de Titanio": 3, "Chatarra Espacial": 10}
+            },
+            # Nivel 3
+            {
+                "level": 3, "power_increase": 20,
+                "cost_lbucks": 280,
+                "cost_materials": {"Placa de Acero Reforzado": 5, "Cristal de Kyber (Pequeño)": 1}
+            },
+        ]
+    }
+}
+
+
 # Puedes agregar todas las palabras que quieras a esta lista
 PALABRAS_LOCALES = [
     "computadora", "biblioteca", "desarrollo", "guitarra", "universo",
@@ -497,7 +537,135 @@ class PlanetSelectionView(discord.ui.View):
             embed.description = "Las defensas del planeta eran demasiado fuertes. Tu nave ha sufrido daños, pero logró escapar. Necesitarás más poder para conquistarlo."
 
         await interaction.followup.send(embed=embed, ephemeral=True)
+
+# En bot.py, sección 3
+
+class UpgradeSelectionView(discord.ui.View):
+    def __init__(self, author_id: int, player_data: dict):
+        super().__init__(timeout=180)
+        self.author_id = author_id
+        self.player_data = player_data
+
+        ship_level = self.player_data['ship_level']
+        station_level = self.player_data['station_level']
+
+        # Botón para mejorar la nave
+        ship_button = Button(label=f"Mejorar Nave (Nivel {ship_level})", custom_id="upgrade_ship", style=discord.ButtonStyle.primary)
+        ship_button.callback = self.select_upgrade_callback
+        self.add_item(ship_button)
+
+        # Botón para mejorar la estación
+        station_button = Button(label=f"Mejorar Estación (Nivel {station_level})", custom_id="upgrade_station", style=discord.ButtonStyle.secondary)
+        station_button.callback = self.select_upgrade_callback
+        self.add_item(station_button)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("No puedes usar los botones de otro comandante.", ephemeral=True)
+            return False
+        return True
+
+    async def select_upgrade_callback(self, interaction: discord.Interaction):
+        upgrade_type = interaction.data['custom_id'].split('_')[1] # 'ship' o 'station'
+        current_level = self.player_data[f"{upgrade_type}_level"]
         
+        # Encontrar la próxima mejora disponible
+        next_upgrade = None
+        for upgrade in UPGRADE_CATALOG[upgrade_type]['upgrades']:
+            if upgrade['level'] == current_level + 1:
+                next_upgrade = upgrade
+                break
+        
+        if not next_upgrade:
+            await interaction.response.send_message(f"¡Tu {UPGRADE_CATALOG[upgrade_type]['name']} ya está al máximo nivel!", ephemeral=True)
+            return
+
+        # Verificar si el jugador tiene suficientes recursos
+        balance = await asyncio.to_thread(db.get_balance, self.author_id)
+        inventory_summary = await asyncio.to_thread(db.summarize_inventory, self.author_id)
+
+        has_lbucks = balance >= next_upgrade['cost_lbucks']
+        
+        materials_ok = True
+        cost_str = f"**{next_upgrade['cost_lbucks']}** LBucks 🪙\n"
+        for mat, required in next_upgrade['cost_materials'].items():
+            owned = inventory_summary.get(mat, 0)
+            emoji = "✅" if owned >= required else "❌"
+            cost_str += f"{emoji} **{required}x** {mat} (Tienes {owned})\n"
+            if owned < required:
+                materials_ok = False
+        
+        can_afford = has_lbucks and materials_ok
+        
+        embed = discord.Embed(
+            title=f"Mejorar {UPGRADE_CATALOG[upgrade_type]['name']} a Nivel {next_upgrade['level']}",
+            color=discord.Color.orange()
+        )
+        embed.add_field(name="Aumento de Poder", value=f"+{next_upgrade['power_increase']} 💥", inline=False)
+        embed.add_field(name="Costo de la Mejora", value=cost_str, inline=False)
+
+        if not can_afford:
+            embed.set_footer(text="No tienes los recursos suficientes.")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            confirm_view = ConfirmUpgradeView(
+                author_id=self.author_id,
+                upgrade_type=upgrade_type,
+                upgrade_details=next_upgrade
+            )
+            await interaction.response.send_message(embed=embed, view=confirm_view, ephemeral=True)
+
+
+class ConfirmUpgradeView(discord.ui.View):
+    def __init__(self, author_id: int, upgrade_type: str, upgrade_details: dict):
+        super().__init__(timeout=60)
+        self.author_id = author_id
+        self.upgrade_type = upgrade_type
+        self.upgrade_details = upgrade_details
+
+    @discord.ui.button(label="Confirmar y Pagar", style=discord.ButtonStyle.success)
+    async def confirm_button(self, button: Button, interaction: discord.Interaction):
+        await interaction.response.defer()
+
+        # Doble verificación de recursos
+        balance = await asyncio.to_thread(db.get_balance, self.author_id)
+        if balance < self.upgrade_details['cost_lbucks']:
+            await interaction.followup.send("¡Error! Parece que ya no tienes suficientes LBucks.", ephemeral=True)
+            return
+        
+        # Pagar LBucks
+        await asyncio.to_thread(db.update_lbucks, self.author_id, -self.upgrade_details['cost_lbucks'])
+        
+        # Pagar materiales
+        await asyncio.to_thread(db.remove_materials_from_inventory, self.author_id, self.upgrade_details['cost_materials'])
+        
+        # Aplicar la mejora
+        player = await asyncio.to_thread(db.get_player_profile, self.author_id)
+        updates = {
+            f"{self.upgrade_type}_level": self.upgrade_details['level'],
+            "power_level": player['power_level'] + self.upgrade_details['power_increase']
+        }
+        await asyncio.to_thread(db.update_player_profile, self.author_id, updates)
+
+        embed = discord.Embed(
+            title=f"🎉 ¡Mejora Completada!",
+            description=f"Tu **{UPGRADE_CATALOG[self.upgrade_type]['name']}** ha sido mejorada al **Nivel {self.upgrade_details['level']}**.",
+            color=discord.Color.green()
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        
+        # Desactivar botones
+        for item in self.children:
+            item.disabled = True
+        await interaction.edit_original_response(view=self)
+
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
+    async def cancel_button(self, button: Button, interaction: discord.Interaction):
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="Mejora cancelada.", view=self)
+
 # --- 4. EVENTOS Y LISTENERS ---
 invites_cache = {}
 
@@ -703,7 +871,7 @@ async def ayuda(ctx: discord.ApplicationContext):
         color=discord.Color.blue())
     
     embed.add_field(name="💰 Economía", value="`/saldo`, `/donar`, `/canjear`, `/login_diario`, `/leaderboard`", inline=False)
-    embed.add_field(name="🚀 Aventura Espacial", value="`/aventura iniciar`, `/aventura perfil`, `/aventura explorar`", inline=False)
+    embed.add_field(name="🚀 Aventura Espacial", value="`/aventura iniciar`, `/aventura perfil`, `/aventura explorar`, `/aventura mejorar`", inline=False)
     embed.add_field(name="🕹️ Juegos", value="`/juego palabra` (Ahorcado)\n`/juego numero` (Adivinar Número)\n`/adivinar` (Para el juego de número)", inline=False)
     embed.add_field(name="👥 Social", value="`/invitaciones`", inline=False)
     embed.add_field(name="📋 Misiones", value="`/misiones`", inline=False)
@@ -971,6 +1139,24 @@ async def aventura_explorar(ctx: discord.ApplicationContext):
     )
     
     view = PlanetSelectionView(planets, ctx.author.id)
+    await ctx.followup.send(embed=embed, view=view, ephemeral=True)
+
+@adventure_group.command(name="mejorar", description="Mejora tu nave o estación usando LBucks y materiales.")
+async def aventura_mejorar(ctx: discord.ApplicationContext):
+    await ctx.defer(ephemeral=True)
+    player = await asyncio.to_thread(db.get_player_profile, ctx.author.id)
+
+    if not player:
+        await ctx.followup.send("Debes iniciar tu aventura primero con `/aventura iniciar`.", ephemeral=True)
+        return
+        
+    embed = discord.Embed(
+        title="🔧 Taller de Mejoras 🔧",
+        description="Selecciona qué quieres mejorar. Las mejoras requieren LBucks y materiales que obtienes al conquistar planetas.",
+        color=discord.Color.light_grey()
+    )
+    
+    view = UpgradeSelectionView(author_id=ctx.author.id, player_data=player)
     await ctx.followup.send(embed=embed, view=view, ephemeral=True)
 
 # --- 6. COMANDOS DE ADMINISTRACIÓN ---
