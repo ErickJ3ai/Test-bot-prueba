@@ -270,13 +270,17 @@ def get_explorable_planets(conquered_planet_names: list):
     """Obtiene planetas que el usuario NO ha conquistado."""
     try:
         query = supabase.from_('adventure_planets').select('*')
+
+        # --- LA LÍNEA CORREGIDA ESTÁ AQUÍ ---
+        # Si la lista de planetas conquistados no está vacía, los filtramos.
         if conquered_planet_names:
-            # .not_('columna', 'in', ('valor1', 'valor2'))
-            query = query.not_('name', 'in', tuple(conquered_planet_names))
-        
+            # La sintaxis correcta para "not in" es .not_.in_()
+            query = query.not_.in_('name', conquered_planet_names)
+        # --- FIN DE LA CORRECCIÓN ---
+
         response = query.execute()
-        
-        # Supabase no tiene un random() directo en la API, así que lo hacemos en Python
+
+        # El resto del código para elegir 3 al azar sigue igual
         available_planets = response.data
         if len(available_planets) <= 3:
             return available_planets
@@ -285,3 +289,53 @@ def get_explorable_planets(conquered_planet_names: list):
     except Exception as e:
         print(f"[DB ERROR] Error en get_explorable_planets: {e}")
         return []
+
+def summarize_inventory(user_id):
+    """Cuenta los materiales en el inventario de un jugador y los devuelve en un diccionario."""
+    try:
+        player = get_player_profile(user_id)
+        if not player or not player['inventory']:
+            return {}
+        
+        summary = {}
+        for item in player['inventory']:
+            name = item.get('name')
+            if name:
+                summary[name] = summary.get(name, 0) + 1
+        return summary
+    except Exception as e:
+        print(f"[DB ERROR] Error en summarize_inventory: {e}")
+        return {}
+
+
+def remove_materials_from_inventory(user_id, materials_to_remove: dict):
+    """Elimina una cantidad específica de materiales del inventario de un jugador."""
+    try:
+        player = get_player_profile(user_id)
+        if not player:
+            return
+
+        current_inventory = player['inventory']
+        
+        # Copiamos el diccionario para poder iterar y eliminar de forma segura
+        temp_materials_to_remove = materials_to_remove.copy()
+
+        new_inventory = []
+        # Iteramos el inventario en orden inverso para poder eliminar sin afectar los índices
+        for item in reversed(current_inventory):
+            item_name = item.get('name')
+            if item_name in temp_materials_to_remove and temp_materials_to_remove[item_name] > 0:
+                # Si encontramos un material que necesitamos quitar, lo "gastamos" y no lo añadimos al nuevo inventario
+                temp_materials_to_remove[item_name] -= 1
+            else:
+                # Si no es un material a gastar, lo conservamos
+                new_inventory.append(item)
+        
+        # Volvemos a invertir la lista para que mantenga su orden original
+        new_inventory.reverse()
+
+        # Actualizamos la base de datos con el nuevo inventario
+        update_player_profile(user_id, {'inventory': new_inventory})
+
+    except Exception as e:
+        print(f"[DB ERROR] Error en remove_materials_from_inventory: {e}")
