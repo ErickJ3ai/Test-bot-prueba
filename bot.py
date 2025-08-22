@@ -45,7 +45,16 @@ PALABRAS_LOCALES = [
     "judicatura", "estacionario", "cualificacion", "historiagrama", "gubernamental", 
     "adjudicarse", "Muchedumbre", "hidraulico", "criminologia", "revolucion", "tirania", 
     "embebido", "embotellamiento", "electromagnetismo", "cuantitativo", "cualitativo", 
-    "primavera", "empobrecer", "egocentrismo", "abstraccion", "abstinencia"
+    "primavera", "empobrecer", "egocentrismo", "abstraccion", "abstinencia", "equivalencia",
+    "ojimetro", "hispanicos", "lexicografica", "estrategico", "pasarela", "caligrafico", "sanscrito",
+    "transcripcion", "heterogramas", "heraldica", "Enciclopedico", "interjeccion", "Delimitacion", 
+    "estructurarse", "locuciones", "diferenciacion", "exhaustivo", "refrendaban", "acepciones", 
+    "hispanohablante", "nutrida", "caricatura", "sismologia", "arandanos", "luminiscencia", 
+    "espejismo", "translucidos", "transformarse", "mutuo", "dualidad", "existencialismo", 
+    "cabellera", "extinguir", "frontera", "adelgazar", "dramatizar", "ñandu", "inmobiliaria", 
+    "monotono", "reeducacion", "titulacion", "advertencia", "magdalena", "magnate", "bobina",
+    "curaciones", "mercurio", "precipitarse", "precipicio",
+    "rabia", "somatico", "movilizacion", "embaucar", "momentaneo"
 ]
 
 HANGMAN_PICS = [
