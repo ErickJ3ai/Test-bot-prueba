@@ -271,7 +271,7 @@ class RedeemMenuView(View):
         self.items = items
         for i, (item_id, price, stock) in enumerate(self.items):
             robux_amount = item_id.split('_')[0]
-            label = f"{robux_amount} ⏣ ({price} LBucks)"
+            label = f"{robux_amount} ({price} LBucks)"
             button = Button(label=label,
                             custom_id=f"redeem_{item_id}",
                             style=discord.ButtonStyle.blurple,
