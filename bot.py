@@ -1377,7 +1377,23 @@ async def test_tienda(ctx: discord.ApplicationContext):
     except Exception as e:
         print(f"🚨 EXCEPCIÓN DURANTE LA PRUEBA DE DIAGNÓSTICO: {e}")
         await ctx.edit_original_response(content=f"❌ La prueba falló con una excepción. Revisa los logs para ver el error: `{e}`")
+
+@admin_commands.command(name="sync", description="[Admin] Sincroniza manualmente los comandos con Discord.")
+async def sync(ctx: discord.ApplicationContext):
+    admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
+    if admin_role is None or admin_role not in ctx.author.roles:
+        await ctx.respond("Este comando es solo para administradores.", ephemeral=True)
+        return
         
+    await ctx.defer()
+    try:
+        await bot.sync_commands()
+        await ctx.followup.send("✅ ¡Los comandos han sido sincronizados exitosamente con Discord!")
+        print("--- Comandos sincronizados manualmente ---")
+    except Exception as e:
+        await ctx.followup.send(f"❌ Hubo un error al sincronizar los comandos: {e}")
+        print(f"Error en la sincronización manual: {e}")
+       
 # --- 7. SERVIDOR WEB Y EJECUCIÓN ---
 app = Flask('')
 @app.route('/')
