@@ -1334,66 +1334,30 @@ async def add_lbucks(ctx: discord.ApplicationContext, usuario: discord.Member, c
         f"Se han **{action} {abs(cantidad)} LBucks** a {usuario.mention}.",
         ephemeral=True)
 
-@admin_commands.command(name="test_tienda", description="[Diagnóstico] Prueba la conexión y obtención de datos de la tienda.")
-async def test_tienda(ctx: discord.ApplicationContext):
-    """
-    Este comando nos ayudará a ver qué datos devuelve realmente la base de datos.
-    """
-    admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
-    if admin_role is None or admin_role not in ctx.author.roles:
-        await ctx.respond("Este comando es solo para administradores.", ephemeral=True)
-        return
-
+@admin_commands.command(name="test_tabla_shop", description="[Diagnóstico] Realiza la prueba más simple posible en la tabla 'shop'.")
+async def test_shop_table(ctx: discord.ApplicationContext):
     await ctx.defer(ephemeral=True)
-    await ctx.followup.send("⏳ Realizando prueba de diagnóstico... Revisa los logs de Render.", ephemeral=True)
-
-    print("\n--- INICIANDO PRUEBA DE DIAGNÓSTICO DE LA TIENDA ---")
     
     try:
-        # 1. Llamamos a la función exacta que usa el comando /canjear
-        items = db.get_shop_items()
+        # La consulta más simple posible: solo contar las filas.
+        # Esto nos dirá si podemos leer la tabla o no.
+        response = db.supabase.from_('shop').select('item_id', count='exact').execute()
         
-        # 2. Imprimimos en la consola de Render la información detallada
-        print(f"Resultado crudo de db.get_shop_items():\n{items}\n")
-        
-        # 3. Verificamos el tipo y la longitud
-        if items is not None:
-            print(f"Tipo de dato recibido: {type(items)}")
-            print(f"Número de ítems recibidos: {len(items)}")
-            if len(items) > 0:
-                print(f"Tipo de dato del primer ítem: {type(items[0])}")
-                print(f"Contenido del primer ítem: {items[0]}")
-        else:
-            print("La función devolvió: None")
-            
-        print("--- PRUEBA DE DIAGNÓSTICO FINALIZADA ---\n")
-        
-        # 4. Enviamos un resumen a Discord
-        if items is not None:
-             await ctx.edit_original_response(content=f"✅ Prueba finalizada. Se recibieron **{len(items)}** ítems. Revisa los logs para ver los datos completos.")
-        else:
-             await ctx.edit_original_response(content="❌ Prueba finalizada. La función devolvió **None**. Revisa los logs.")
+        # El cliente de Supabase a veces no lanza un error, sino que lo pone en la respuesta.
+        # Esta es una comprobación crucial.
+        if hasattr(response, 'error') and response.error is not None:
+             error_message = response.error.message
+             await ctx.followup.send(f"❌ **La base de datos devolvió un error:**\n```\n{error_message}\n```")
+             return
 
-    except Exception as e:
-        print(f"🚨 EXCEPCIÓN DURANTE LA PRUEBA DE DIAGNÓSTICO: {e}")
-        await ctx.edit_original_response(content=f"❌ La prueba falló con una excepción. Revisa los logs para ver el error: `{e}`")
-
-@admin_commands.command(name="sync", description="[Admin] Sincroniza manualmente los comandos con Discord.")
-async def sync(ctx: discord.ApplicationContext):
-    admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
-    if admin_role is None or admin_role not in ctx.author.roles:
-        await ctx.respond("Este comando es solo para administradores.", ephemeral=True)
-        return
+        # Si no hubo error, contamos los datos.
+        item_count = len(response.data)
+        await ctx.followup.send(f"✅ **¡Conexión exitosa con la tabla 'shop'!**\n\nSe encontraron **{item_count}** filas (ítems).")
         
-    await ctx.defer()
-    try:
-        await bot.sync_commands()
-        await ctx.followup.send("✅ ¡Los comandos han sido sincronizados exitosamente con Discord!")
-        print("--- Comandos sincronizados manualmente ---")
     except Exception as e:
-        await ctx.followup.send(f"❌ Hubo un error al sincronizar los comandos: {e}")
-        print(f"Error en la sincronización manual: {e}")
-       
+        # Esto atrapará cualquier otro error inesperado.
+        await ctx.followup.send(f"❌ **El comando falló con una excepción de Python:**\n```\n{type(e).__name__}: {e}\n```")
+      
 # --- 7. SERVIDOR WEB Y EJECUCIÓN ---
 app = Flask('')
 @app.route('/')
