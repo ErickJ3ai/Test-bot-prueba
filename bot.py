@@ -15,6 +15,9 @@ import asyncio
 import random
 import aiohttp
 from unidecode import unidecode
+import traceback
+import sys
+
 
 # --- 1. CONFIGURACIÓN E INICIALIZACIÓN ---
 load_dotenv()
@@ -952,6 +955,8 @@ async def daily_command(ctx: discord.ApplicationContext):
         print(f"🚨 Error inesperado en daily_command: {e}")
         await ctx.followup.send("Ocurrió un error al procesar tu recompensa. Por favor, intenta de nuevo más tarde.", ephemeral=True)
 
+# En bot.py, reemplaza este comando por completo
+
 @bot.slash_command(
     guild_ids=[GUILD_ID], name="canjear", description="Abre la tienda para canjear LBucks."
 )
@@ -959,6 +964,7 @@ async def canjear(ctx: discord.ApplicationContext):
     await ctx.defer(ephemeral=True)
     
     try:
+        # --- El código de la lógica principal no cambia ---
         items = await asyncio.to_thread(db.get_shop_items)
         balance = await asyncio.to_thread(db.get_balance, ctx.author.id)
         
@@ -995,8 +1001,27 @@ async def canjear(ctx: discord.ApplicationContext):
         await ctx.followup.send(embed=embed, view=view, ephemeral=True)
 
     except Exception as e:
-        print(f"🚨 ERROR CRÍTICO en /canjear: {e}")
-        await ctx.followup.send(f"❌ Hubo un error inesperado al cargar la tienda. Revisa los logs de Render para ver el error completo.", ephemeral=True)
+        # --- NUEVO BLOQUE DE DEPURACIÓN AVANZADA ---
+        # 1. Creamos un reporte completo del error.
+        error_details = traceback.format_exc()
+        
+        # 2. Forzamos la escritura del error en los logs de Render.
+        print("🚨 ERROR CRÍTICO ATRAPADO EN /canjear", file=sys.stderr)
+        print(error_details, file=sys.stderr)
+        sys.stderr.flush()
+        
+        # 3. Te enviamos el error completo directamente a Discord.
+        # Lo acortamos un poco para asegurarnos de que quepa en un mensaje.
+        error_message_to_user = (
+            "❌ Hubo un error inesperado al cargar la tienda.\n\n"
+            "**Detalles del error para el desarrollador:**\n"
+            f"```\n{error_details[:1800]}\n```"
+        )
+        try:
+            await ctx.followup.send(error_message_to_user, ephemeral=True)
+        except discord.errors.NotFound:
+            # Si el followup falla, intenta con el webhook por si acaso
+            await ctx.respond(error_message_to_user, ephemeral=True)
 
 @bot.slash_command(
     guild_ids=[GUILD_ID], name="saldo", description="Consulta tu saldo de LBucks."
