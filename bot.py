@@ -266,36 +266,70 @@ class DonateModal(discord.ui.Modal):
                 ephemeral=True)
 
 class RedeemMenuView(View):
-    def __init__(self, items):
+    def __init__(self, items: list, user_balance: int, author_id: int):
         super().__init__(timeout=300)
-        self.items = items
-        for i, (item_id, price, stock) in enumerate(self.items):
-            robux_amount = item_id.split('_')[0]
-            label = f"{robux_amount} ({price} LBucks)"
-            button = Button(label=label,
-                            custom_id=f"redeem_{item_id}",
-                            style=discord.ButtonStyle.blurple,
-                            disabled=(stock <= 0))
-            button.callback = self.handle_redeem_click
-            self.add_item(button)
+        self.author_id = author_id
 
-    async def handle_redeem_click(self, interaction: discord.Interaction):
+        options = []
+        for item in items:
+            can_afford = user_balance >= item['price']
+            is_in_stock = item['stock'] > 0
+            
+            # Descripción que aparece debajo de cada opción
+            option_description = f"Precio: {item['price']} LBucks | Stock: {item['stock']}"
+            
+            # Se deshabilita si no hay stock O si el usuario no puede pagarlo
+            is_disabled = not is_in_stock or not can_afford
+            
+            if not is_in_stock:
+                option_description += " (Agotado)"
+            elif not can_afford:
+                option_description += " (Fondos insuficientes)"
+
+            options.append(
+                discord.SelectOption(
+                    label=item['item_id'].replace('_', ' ').capitalize(),
+                    value=item['item_id'],
+                    description=option_description,
+                    emoji=item.get('emoji', '💰'),
+                    disabled=is_disabled
+                )
+            )
+
+        # Creación del menú desplegable
+        select_menu = discord.ui.Select(
+            placeholder="Selecciona una recompensa para canjear...",
+            options=options,
+            custom_id="redeem_select"
+        )
+        select_menu.callback = self.select_callback
+        self.add_item(select_menu)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("No puedes usar el panel de canjeo de otra persona.", ephemeral=True)
+            return False
+        return True
+
+    async def select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
+        # Lógica para manejar la selección del menú
         await interaction.response.defer(ephemeral=True)
-        custom_id = interaction.data['custom_id']
-        item_id = custom_id.replace("redeem_", "")
-        item = await asyncio.to_thread(db.get_item, item_id)
-        if not item:
-            return await interaction.followup.send("Este item ya no existe.",
-                                                   ephemeral=True)
-        view = ConfirmCancelView(user_id=interaction.user.id,
-                                 item_id=item_id,
-                                 price=item[1])
-        await interaction.followup.send(
-            f"¿Confirmas el canje de **{item[0].split('_')[0]} Robux** "
-            f"por **{item[1]} LBucks**?",
-            view=view,
-            ephemeral=True)
+        
+        item_id = select.values[0]
+        item_data = await asyncio.to_thread(db.get_item, item_id)
+        
+        if not item_data:
+            await interaction.followup.send("Este ítem ya no existe.", ephemeral=True)
+            return
 
+        view = ConfirmCancelView(user_id=interaction.user.id, item_id=item_id, price=item_data[1])
+        await interaction.followup.send(
+            f"¿Confirmas el canje de **{item_id.replace('_', ' ').capitalize()}** "
+            f"por **{item_data[1]} LBucks**?",
+            view=view,
+            ephemeral=True
+        )
+    
 class ConfirmCancelView(View):
     def __init__(self, user_id, item_id, price):
         super().__init__(timeout=60)
@@ -929,16 +963,45 @@ async def daily_command(ctx: discord.ApplicationContext):
         await ctx.followup.send("Ocurrió un error al procesar tu recompensa. Por favor, intenta de nuevo más tarde.", ephemeral=True)
 
 
-
 @bot.slash_command(
     guild_ids=[GUILD_ID], name="canjear", description="Abre la tienda para canjear LBucks."
 )
 async def canjear(ctx: discord.ApplicationContext):
     await ctx.defer(ephemeral=True)
-    items = await asyncio.to_thread(db.get_shop_items) or []
-    await ctx.followup.send("Abriendo el Centro de Canjeo...",
-                            view=RedeemMenuView(items),
-                            ephemeral=True)
+
+    # Obtenemos los datos necesarios ANTES de construir la UI
+    items = await asyncio.to_thread(db.get_shop_items)
+    balance = await asyncio.to_thread(db.get_balance, ctx.author.id)
+
+    if not items:
+        await ctx.followup.send("La tienda de canjeo está vacía en este momento. ¡Vuelve pronto!", ephemeral=True)
+        return
+
+    embed = discord.Embed(
+        title="✨ Centro de Canjeo de Recompensas ✨",
+        description=f"Usa tus LBucks para obtener recompensas exclusivas.\n\n🪙 **Tu Saldo Actual: {balance} LBucks**",
+        color=discord.Color.purple()
+    )
+    embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
+
+    # Construimos la lista de ítems para el Embed
+    for item in items:
+        can_afford = balance >= item['price']
+        is_in_stock = item['stock'] > 0
+
+        status_emoji = "✅" if can_afford and is_in_stock else "❌"
+
+        embed.add_field(
+            name=f"{item.get('emoji', '💰')} {item['item_id'].replace('_', ' ').capitalize()}",
+            value=f"`Precio: {item['price']} LBucks` | `Stock: {item['stock']}`\n"
+                  f"*{item.get('description', 'Sin descripción.')}*",
+            inline=False
+        )
+
+    embed.set_footer(text="Selecciona un ítem del menú de abajo para continuar.")
+
+    view = RedeemMenuView(items=items, user_balance=balance, author_id=ctx.author.id)
+    await ctx.followup.send(embed=embed, view=view, ephemeral=True)
 
 
 @bot.slash_command(
