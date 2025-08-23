@@ -1318,7 +1318,6 @@ async def aventura_mejorar(ctx: discord.ApplicationContext):
     view = UpgradeSelectionView(author_id=ctx.author.id, player_data=player)
     await ctx.followup.send(embed=embed, view=view, ephemeral=True)
 
-# --- 6. COMANDOS DE ADMINISTRACIÓN ---
 admin_commands = bot.create_group("admin", "Comandos de administración", guild_ids=[GUILD_ID])
 
 @admin_commands.command(name="add_lbucks", description="Añade LBucks a un usuario.")
@@ -1335,6 +1334,50 @@ async def add_lbucks(ctx: discord.ApplicationContext, usuario: discord.Member, c
         f"Se han **{action} {abs(cantidad)} LBucks** a {usuario.mention}.",
         ephemeral=True)
 
+@admin_commands.command(name="test_tienda", description="[Diagnóstico] Prueba la conexión y obtención de datos de la tienda.")
+async def test_tienda(ctx: discord.ApplicationContext):
+    """
+    Este comando nos ayudará a ver qué datos devuelve realmente la base de datos.
+    """
+    admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
+    if admin_role is None or admin_role not in ctx.author.roles:
+        await ctx.respond("Este comando es solo para administradores.", ephemeral=True)
+        return
+
+    await ctx.defer(ephemeral=True)
+    await ctx.followup.send("⏳ Realizando prueba de diagnóstico... Revisa los logs de Render.", ephemeral=True)
+
+    print("\n--- INICIANDO PRUEBA DE DIAGNÓSTICO DE LA TIENDA ---")
+    
+    try:
+        # 1. Llamamos a la función exacta que usa el comando /canjear
+        items = db.get_shop_items()
+        
+        # 2. Imprimimos en la consola de Render la información detallada
+        print(f"Resultado crudo de db.get_shop_items():\n{items}\n")
+        
+        # 3. Verificamos el tipo y la longitud
+        if items is not None:
+            print(f"Tipo de dato recibido: {type(items)}")
+            print(f"Número de ítems recibidos: {len(items)}")
+            if len(items) > 0:
+                print(f"Tipo de dato del primer ítem: {type(items[0])}")
+                print(f"Contenido del primer ítem: {items[0]}")
+        else:
+            print("La función devolvió: None")
+            
+        print("--- PRUEBA DE DIAGNÓSTICO FINALIZADA ---\n")
+        
+        # 4. Enviamos un resumen a Discord
+        if items is not None:
+             await ctx.edit_original_response(content=f"✅ Prueba finalizada. Se recibieron **{len(items)}** ítems. Revisa los logs para ver los datos completos.")
+        else:
+             await ctx.edit_original_response(content="❌ Prueba finalizada. La función devolvió **None**. Revisa los logs.")
+
+    except Exception as e:
+        print(f"🚨 EXCEPCIÓN DURANTE LA PRUEBA DE DIAGNÓSTICO: {e}")
+        await ctx.edit_original_response(content=f"❌ La prueba falló con una excepción. Revisa los logs para ver el error: `{e}`")
+        
 # --- 7. SERVIDOR WEB Y EJECUCIÓN ---
 app = Flask('')
 @app.route('/')
