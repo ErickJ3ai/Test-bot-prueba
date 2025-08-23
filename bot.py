@@ -272,95 +272,17 @@ class RedeemMenuView(View):
 
         options = []
         for item in items:
-            can_afford = user_balance >= item['price']
-            is_in_stock = item['stock'] > 0
+            try:
+                price = int(item.get('price', 0))
+                stock = int(item.get('stock', 0))
+            except (ValueError, TypeError):
+                price = 0
+                stock = 0
             
-            # Descripción que aparece debajo de cada opción
-            option_description = f"Precio: {item['price']} LBucks | Stock: {item['stock']}"
-            
-            # Se deshabilita si no hay stock O si el usuario no puede pagarlo
-            is_disabled = not is_in_stock or not can_afford
-            
-            if not is_in_stock:
-                option_description += " (Agotado)"
-            elif not can_afford:
-                option_description += " (Fondos insuficientes)"
-
-            options.append(
-                discord.SelectOption(
-                    label=item['item_id'].replace('_', ' ').capitalize(),
-                    value=item['item_id'],
-                    description=option_description,
-                    emoji=item.get('emoji', '💰'),
-                    disabled=is_disabled
-                )
-            )
-
-        # Creación del menú desplegable
-        select_menu = discord.ui.Select(
-            placeholder="Selecciona una recompensa para canjear...",
-            options=options,
-            custom_id="redeem_select"
-        )
-        select_menu.callback = self.select_callback
-        self.add_item(select_menu)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.author_id:
-            await interaction.response.send_message("No puedes usar el panel de canjeo de otra persona.", ephemeral=True)
-            return False
-        return True
-
-    async def select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
-        # Lógica para manejar la selección del menú
-        await interaction.response.defer(ephemeral=True)
-        
-        item_id = select.values[0]
-        item_data = await asyncio.to_thread(db.get_item, item_id)
-        
-        if not item_data:
-            await interaction.followup.send("Este ítem ya no existe.", ephemeral=True)
-            return
-
-        view = ConfirmCancelView(user_id=interaction.user.id, item_id=item_id, price=item_data[1])
-        await interaction.followup.send(
-            f"¿Confirmas el canje de **{item_id.replace('_', ' ').capitalize()}** "
-            f"por **{item_data[1]} LBucks**?",
-            view=view,
-            ephemeral=True
-        )
-    
-class ConfirmCancelView(View):
-    def __init__(self, user_id, item_id, price):
-        super().__init__(timeout=60)
-        self.user_id = user_id
-        self.item_id = item_id
-        self.price = price
-
-    @discord.ui.button(label="Confirmar Canjeo",
-                       style=discord.ButtonStyle.success)
-    async def confirm_button(self, button: Button,
-                             interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-# En bot.py, reemplaza estas dos clases
-
-class RedeemMenuView(View):
-    def __init__(self, items: list, user_balance: int, author_id: int):
-        super().__init__(timeout=300)
-        self.author_id = author_id
-
-        options = []
-        for item in items:
-            # Verificaciones para asegurar que los datos existen
-            price = item.get('price', 0)
-            stock = item.get('stock', 0)
             item_id = item.get('item_id', 'unknown_item')
-            
             can_afford = user_balance >= price
             is_in_stock = stock > 0
-            
             option_description = f"Precio: {price} LBucks | Stock: {stock}"
-            
             is_disabled = not is_in_stock or not can_afford
             
             if not is_in_stock:
@@ -380,8 +302,7 @@ class RedeemMenuView(View):
 
         select_menu = discord.ui.Select(
             placeholder="Selecciona una recompensa para canjear...",
-            options=options,
-            custom_id="redeem_select"
+            options=options, custom_id="redeem_select"
         )
         select_menu.callback = self.select_callback
         self.add_item(select_menu)
@@ -394,22 +315,15 @@ class RedeemMenuView(View):
 
     async def select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        
         item_id = select.values[0]
-        # Usamos la función get_item que ya tenías
         item_data = await asyncio.to_thread(db.get_item, item_id)
-        
         if not item_data:
-            await interaction.followup.send("Este ítem ya no existe o hubo un error al recuperarlo.", ephemeral=True)
+            await interaction.followup.send("Este ítem ya no existe.", ephemeral=True)
             return
-
-        # La vista de confirmación sigue funcionando perfectamente
-        view = ConfirmCancelView(user_id=interaction.user.id, item_id=item_id, price=item_data[1])
+        view = ConfirmCancelView(user_id=interaction.user.id, item_id=item_id, price=item_data.get('price', 0))
         await interaction.followup.send(
-            f"¿Confirmas el canje de **{item_id.replace('_', ' ').capitalize()}** "
-            f"por **{item_data[1]} LBucks**?",
-            view=view,
-            ephemeral=True
+            f"¿Confirmas el canje de **{item_id.replace('_', ' ').capitalize()}** por **{item_data.get('price', 0)} LBucks**?",
+            view=view, ephemeral=True
         )
 
 class ConfirmCancelView(View):
@@ -419,46 +333,41 @@ class ConfirmCancelView(View):
         self.item_id = item_id
         self.price = price
 
-    @discord.ui.button(label="Confirmar Canjeo",
-                       style=discord.ButtonStyle.success)
-    async def confirm_button(self, button: Button,
-                             interaction: discord.Interaction):
+    @discord.ui.button(label="Confirmar Canjeo", style=discord.ButtonStyle.success)
+    async def confirm_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         balance = await asyncio.to_thread(db.get_balance, self.user_id)
-        item_data = await asyncio.to_thread(db.get_item, self.item_id)
-        if not item_data or item_data[2] <= 0:
-            await interaction.followup.send(
-                "¡Justo se agotó! Alguien más fue más rápido.")
+        item_data_dict = await asyncio.to_thread(db.get_item, self.item_id)
+        
+        if not item_data_dict or item_data_dict.get('stock', 0) <= 0:
+            await interaction.followup.send("¡Justo se agotó! Alguien más fue más rápido.")
             return
         if balance < self.price:
             await interaction.followup.send("No tienes suficientes LBucks.")
             return
+            
         await asyncio.to_thread(db.update_lbucks, self.user_id, -self.price)
         await asyncio.to_thread(db.update_stock, self.item_id, -1)
+        
         log_channel = bot.get_channel(REDEMPTION_LOG_CHANNEL_ID)
         if log_channel:
             robux_amount = self.item_id.split('_')[0]
             embed = discord.Embed(
                 title="⏳ Nuevo Canjeo Pendiente",
-                description=
-                f"El usuario **{interaction.user.name}** ({interaction.user.id}) ha canjeado **{robux_amount} Robux**.",
-                color=discord.Color.orange(),
-                timestamp=datetime.datetime.utcnow())
+                description=f"El usuario **{interaction.user.name}** ({interaction.user.id}) ha canjeado **{robux_amount} Robux**.",
+                color=discord.Color.orange(), timestamp=datetime.datetime.utcnow()
+            )
             embed.set_thumbnail(url=interaction.user.display_avatar.url)
-            log_message = await log_channel.send(embed=embed,
-                                                 view=AdminActionView())
-            await asyncio.to_thread(db.create_redemption, self.user_id,
-                                    self.item_id, log_message.id)
-        await interaction.followup.send(
-            "¡Canjeo realizado! Un administrador revisará tu solicitud.")
-        await interaction.edit_original_response(content="Procesando...",
-                                                 view=None)
+            log_message = await log_channel.send(embed=embed, view=AdminActionView())
+            await asyncio.to_thread(db.create_redemption, self.user_id, self.item_id, log_message.id)
+            
+        await interaction.followup.send("¡Canjeo realizado! Un administrador revisará tu solicitud.")
+        await interaction.edit_original_response(content="Procesando...", view=None)
 
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
-    async def cancel_button(self, button: Button,
-                            interaction: discord.Interaction):
-        await interaction.response.edit_message(
-            content="Tu canjeo ha sido cancelado.", view=None)
+    async def cancel_button(self, button: Button, interaction: discord.Interaction):
+        await interaction.response.edit_message(content="Tu canjeo ha sido cancelado.", view=None)
+
 
 class AdminActionView(View):
     def __init__(self):
@@ -1043,7 +952,6 @@ async def daily_command(ctx: discord.ApplicationContext):
         print(f"🚨 Error inesperado en daily_command: {e}")
         await ctx.followup.send("Ocurrió un error al procesar tu recompensa. Por favor, intenta de nuevo más tarde.", ephemeral=True)
 
-
 @bot.slash_command(
     guild_ids=[GUILD_ID], name="canjear", description="Abre la tienda para canjear LBucks."
 )
@@ -1054,6 +962,9 @@ async def canjear(ctx: discord.ApplicationContext):
         items = await asyncio.to_thread(db.get_shop_items)
         balance = await asyncio.to_thread(db.get_balance, ctx.author.id)
         
+        if items is None:
+             await ctx.followup.send("Error al comunicarse con la base de datos de la tienda.", ephemeral=True)
+             return
         if not items:
             await ctx.followup.send("La tienda de canjeo está vacía en este momento. ¡Vuelve pronto!", ephemeral=True)
             return
@@ -1066,7 +977,6 @@ async def canjear(ctx: discord.ApplicationContext):
         embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
 
         for item in items:
-            # Usamos .get() con valores por defecto para evitar errores si una columna está vacía
             price = item.get('price', 0)
             stock = item.get('stock', 0)
             item_id = item.get('item_id', 'Ítem Desconocido')
@@ -1086,8 +996,7 @@ async def canjear(ctx: discord.ApplicationContext):
 
     except Exception as e:
         print(f"🚨 ERROR CRÍTICO en /canjear: {e}")
-        await ctx.followup.send("❌ Hubo un error al cargar la tienda. Por favor, avisa a un administrador. Es posible que falten datos en la base de datos (ej: 'description' o 'emoji' en la tabla 'shop').", ephemeral=True)
-
+        await ctx.followup.send(f"❌ Hubo un error inesperado al cargar la tienda. Revisa los logs de Render para ver el error completo.", ephemeral=True)
 
 @bot.slash_command(
     guild_ids=[GUILD_ID], name="saldo", description="Consulta tu saldo de LBucks."
