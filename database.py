@@ -161,13 +161,15 @@ def get_shop_items():
         # Es crucial devolver una lista vacía en caso de error
         return []
 
+# En database.py, reemplaza esta función
+
 def get_item(item_id):
+    """Obtiene los datos de un ítem específico como un diccionario."""
     try:
-        response = supabase.from_('shop').select('item_id, price, stock').eq('item_id', item_id).execute()
-        if response.data:
-            item = response.data[0]
-            return (item['item_id'], item['price'], item['stock'])
-        return None
+        # Hacemos que también pida la descripción y el emoji por si lo necesitas en el futuro
+        response = supabase.from_('shop').select('item_id, price, stock, description, emoji').eq('item_id', item_id).single().execute()
+        # Devuelve el diccionario directamente
+        return response.data if response.data else None
     except Exception as e:
         print(f"[DB ERROR] Error en get_item: {e}")
         return None
