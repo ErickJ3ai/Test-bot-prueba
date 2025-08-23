@@ -148,15 +148,17 @@ def update_mission_progress(user_id, mission_type, progress_increase=1, command_
         print(f"[DB ERROR] Error en update_mission_progress: {e}")
 
 # --- FUNCIONES PARA LA TABLA 'shop' ---
+# En database.py
 def get_shop_items():
     """Obtiene todos los datos de los ítems de la tienda, incluyendo descripción y emoji."""
     try:
-        # Seleccionamos las nuevas columnas
+        # Asegúrate de que tu tabla 'shop' tenga las columnas 'description' y 'emoji'
         response = supabase.from_('shop').select('item_id, price, stock, description, emoji').order('price').execute()
-        # Devolvemos un diccionario por cada ítem para un manejo más fácil
+        # Devuelve una lista de diccionarios, que es lo que el nuevo código espera
         return response.data
     except Exception as e:
         print(f"[DB ERROR] Error en get_shop_items: {e}")
+        # Es crucial devolver una lista vacía en caso de error
         return []
 
 def get_item(item_id):
