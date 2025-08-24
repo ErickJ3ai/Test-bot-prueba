@@ -384,6 +384,8 @@ class ConfirmCancelView(View):
     async def cancel_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.edit_message(content="Tu canjeo ha sido cancelado.", view=None)
 
+# En bot.py, reemplaza esta clase por completo
+
 class AdminActionView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -406,7 +408,8 @@ class AdminActionView(View):
                 content="Este canjeo ya fue procesado.", view=None, embed=None)
         await asyncio.to_thread(db.update_redemption_status, redemption[0],
                                 'completed')
-        user = await bot.fetch_user(redemption[1])
+        # Añadimos int() por seguridad, ya que los IDs de usuario deben ser enteros
+        user = await bot.fetch_user(int(redemption[1]))
         item_name = redemption[2].split('_')[0] + " Robux"
         try:
             await user.send(
@@ -437,13 +440,23 @@ class AdminActionView(View):
         if not redemption or redemption[4] != 'pending':
             return await interaction.edit_original_response(
                 content="Este canjeo ya fue procesado.", view=None, embed=None)
+        
+        # --- INICIO DE LA CORRECCIÓN ---
+        # Ahora 'item' es un diccionario gracias a la nueva función db.get_item()
         item = await asyncio.to_thread(db.get_item, redemption[2])
         if item:
-            await asyncio.to_thread(db.update_lbucks, redemption[1], item[1])
+            # ANTES: await asyncio.to_thread(db.update_lbucks, redemption[1], item[1])
+            # AHORA: Leemos el precio usando la clave 'price' del diccionario.
+            # También convertimos el user_id a int() para mayor seguridad.
+            await asyncio.to_thread(db.update_lbucks, int(redemption[1]), item['price'])
+            
             await asyncio.to_thread(db.update_stock, redemption[2], 1)
+        # --- FIN DE LA CORRECCIÓN ---
+
         await asyncio.to_thread(db.update_redemption_status, redemption[0],
                                 'cancelled_by_admin')
-        user = await bot.fetch_user(redemption[1])
+        
+        user = await bot.fetch_user(int(redemption[1]))
         item_name = redemption[2].split('_')[0] + " Robux"
         try:
             await user.send(
