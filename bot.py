@@ -286,8 +286,8 @@ class RedeemMenuView(View):
             can_afford = user_balance >= price
             is_in_stock = stock > 0
             option_description = f"Precio: {price} LBucks | Stock: {stock}"
-            is_disabled = not is_in_stock or not can_afford
             
+            # Ya no deshabilitamos la opción, solo mostramos el estado en la descripción
             if not is_in_stock:
                 option_description += " (Agotado)"
             elif not can_afford:
@@ -298,8 +298,8 @@ class RedeemMenuView(View):
                     label=item_id.replace('_', ' ').capitalize(),
                     value=item_id,
                     description=option_description,
-                    emoji=item.get('emoji', '💰'),
-                    disabled=is_disabled
+                    emoji=item.get('emoji', '💰')
+                    # LA LÍNEA 'disabled=is_disabled' HA SIDO ELIMINADA DE AQUÍ
                 )
             )
 
@@ -320,9 +320,17 @@ class RedeemMenuView(View):
         await interaction.response.defer(ephemeral=True)
         item_id = select.values[0]
         item_data = await asyncio.to_thread(db.get_item, item_id)
-        if not item_data:
-            await interaction.followup.send("Este ítem ya no existe.", ephemeral=True)
+        
+        # Hacemos una última comprobación aquí por si el item está agotado o no es pagable
+        if not item_data or item_data.get('stock', 0) <= 0:
+            await interaction.followup.send("Lo sentimos, este ítem está agotado.", ephemeral=True)
             return
+        
+        user_balance = await asyncio.to_thread(db.get_balance, interaction.user.id)
+        if user_balance < item_data.get('price', 0):
+             await interaction.followup.send("No tienes suficientes LBucks para canjear este ítem.", ephemeral=True)
+             return
+
         view = ConfirmCancelView(user_id=interaction.user.id, item_id=item_id, price=item_data.get('price', 0))
         await interaction.followup.send(
             f"¿Confirmas el canje de **{item_id.replace('_', ' ').capitalize()}** por **{item_data.get('price', 0)} LBucks**?",
@@ -370,7 +378,6 @@ class ConfirmCancelView(View):
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel_button(self, button: Button, interaction: discord.Interaction):
         await interaction.response.edit_message(content="Tu canjeo ha sido cancelado.", view=None)
-
 
 class AdminActionView(View):
     def __init__(self):
