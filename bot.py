@@ -287,7 +287,6 @@ class RedeemMenuView(View):
             is_in_stock = stock > 0
             option_description = f"Precio: {price} LBucks | Stock: {stock}"
             
-            # Ya no deshabilitamos la opción, solo mostramos el estado en la descripción
             if not is_in_stock:
                 option_description += " (Agotado)"
             elif not can_afford:
@@ -299,7 +298,6 @@ class RedeemMenuView(View):
                     value=item_id,
                     description=option_description,
                     emoji=item.get('emoji', '💰')
-                    # LA LÍNEA 'disabled=is_disabled' HA SIDO ELIMINADA DE AQUÍ
                 )
             )
 
@@ -307,6 +305,8 @@ class RedeemMenuView(View):
             placeholder="Selecciona una recompensa para canjear...",
             options=options, custom_id="redeem_select"
         )
+        # La forma correcta de asignar el callback es directamente en el decorador o a la función.
+        # El callback ahora se define con el nombre correcto que la librería espera.
         select_menu.callback = self.select_callback
         self.add_item(select_menu)
 
@@ -316,24 +316,29 @@ class RedeemMenuView(View):
             return False
         return True
 
-    async def select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
+    # --- ESTA ES LA FUNCIÓN CORREGIDA ---
+    async def select_callback(self, interaction: discord.Interaction):
+        # La firma de la función ahora es la correcta. Solo recibe 'interaction'.
         await interaction.response.defer(ephemeral=True)
-        item_id = select.values[0]
+        
+        # Obtenemos el ítem seleccionado desde los datos de la interacción.
+        item_id = interaction.data['values'][0]
+        
         item_data = await asyncio.to_thread(db.get_item, item_id)
         
-        # Hacemos una última comprobación aquí por si el item está agotado o no es pagable
         if not item_data or item_data.get('stock', 0) <= 0:
-            await interaction.followup.send("Lo sentimos, este ítem está agotado.", ephemeral=True)
+            await interaction.followup.send("Lo sentimos, este ítem está agotado o ya no existe.", ephemeral=True)
             return
         
         user_balance = await asyncio.to_thread(db.get_balance, interaction.user.id)
-        if user_balance < item_data.get('price', 0):
+        item_price = item_data.get('price', 0)
+        if user_balance < item_price:
              await interaction.followup.send("No tienes suficientes LBucks para canjear este ítem.", ephemeral=True)
              return
 
-        view = ConfirmCancelView(user_id=interaction.user.id, item_id=item_id, price=item_data.get('price', 0))
+        view = ConfirmCancelView(user_id=interaction.user.id, item_id=item_id, price=item_price)
         await interaction.followup.send(
-            f"¿Confirmas el canje de **{item_id.replace('_', ' ').capitalize()}** por **{item_data.get('price', 0)} LBucks**?",
+            f"¿Confirmas el canje de **{item_id.replace('_', ' ').capitalize()}** por **{item_price} LBucks**?",
             view=view, ephemeral=True
         )
 
