@@ -370,7 +370,7 @@ class ConfirmCancelView(View):
             robux_amount = self.item_id.split('_')[0]
             embed = discord.Embed(
                 title="⏳ Nuevo Canjeo Pendiente",
-                description=f"El usuario **{interaction.user.name}** ({interaction.user.id}) ha canjeado **{robux_amount} Robux**.",
+                description=f"El usuario **{interaction.user.name}** ({interaction.user.id}) ha canjeado **{robux_amount}**.",
                 color=discord.Color.orange(), timestamp=datetime.datetime.utcnow()
             )
             embed.set_thumbnail(url=interaction.user.display_avatar.url)
